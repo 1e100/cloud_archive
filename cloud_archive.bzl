@@ -1,6 +1,8 @@
 # This rule will download an archive from S3, check sha256, extract it, and
 # symlink the provided BUILD file inside.
 
+# License: Apache 2.0
+
 
 def _s3_archive_impl(ctx):
     url = "s3://{}/{}".format(ctx.attr.bucket, ctx.attr.file_path)
