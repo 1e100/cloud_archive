@@ -1,0 +1,11 @@
+bazel-*
+*.dSYM
+**/*.pyc
+**/*.swp
+.ipynb_checkpoints/
+__pycache__
+*~
+.bazelrc
+xcuserdata/
+.idea
+
