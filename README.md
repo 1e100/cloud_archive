@@ -5,6 +5,22 @@ workspace dependencies from Google Cloud Storage, S3, Minio, or Backblaze B2.
 This can be useful when pulling data, code, and binary dependencies from these
 storage backends into your Bazel build.
 
+## Usage
+```starlark
+load("//:cloud_archive.bzl", "gs_archive")
+
+gs_archive(
+    name = "archive_gcloud",
+    build_file = "//:BUILD.archive",
+    bucket = "my_bucket",
+    file_path = "cloud_archive_test.tar.gz",
+    sha256 = "bf4dd5304180561a745e816ee6a8db974a3fcf5b9d706a493776d77202c48bc9",
+    strip_prefix = "cloud_archive_test",
+)
+```
+Pretty similar to HTTP archive rule in Bazel. `s3_archive`, `minio_archive` and
+`b2_archive` are also available.
+
 ## Requirements
 
 This currently only works on Linux, although adapting it to macOS and Windows
