@@ -1,6 +1,6 @@
 workspace(name = "cloud_archive")
 
-load(":cloud_archive.bzl", "s3_archive", "minio_archive")
+load(":cloud_archive.bzl", "minio_archive", "s3_archive")
 
 s3_archive(
     name = "archive_s3",

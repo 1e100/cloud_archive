@@ -52,28 +52,28 @@ def cloud_archive_download(
     # Minio does not support bucket per se. The path is expected to contain what
     # you'd normally feed into `mc`.
     if provider == "minio":
-      tool_path = repo_ctx.which("mc")
-      src_url = file_path
-      cmd = [tool_path, "cp", "-q", src_url, "."]
+        tool_path = repo_ctx.which("mc")
+        src_url = file_path
+        cmd = [tool_path, "cp", "-q", src_url, "."]
     elif provider == "google":
-      tool_path = repo_ctx.which("gsutil")
-      src_url = "gs://{}/{}".format(bucket, file_path)
-      cmd = [tool_path, "cp", src_url, "."]
+        tool_path = repo_ctx.which("gsutil")
+        src_url = "gs://{}/{}".format(bucket, file_path)
+        cmd = [tool_path, "cp", src_url, "."]
     elif provider == "s3":
-      tool_path = repo_ctx.which("aws")
-      extra_flags = ["--profile", profile] if profile else []
-      src_url = "s3://{}/{}".format(bucket, file_path)
-      cmd = [tool_path] + extra_flags + ["s3", "cp", src_url, "."]
+        tool_path = repo_ctx.which("aws")
+        extra_flags = ["--profile", profile] if profile else []
+        src_url = "s3://{}/{}".format(bucket, file_path)
+        cmd = [tool_path] + extra_flags + ["s3", "cp", src_url, "."]
     elif provider == "backblaze":
-      # NOTE: currently untested, as I don't have a B2 account.
-      tool_path = repo_ctx.which("b2")
-      src_url = "b2://{}/{}".format(bucket, file_path)
-      cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, "."]
+        # NOTE: currently untested, as I don't have a B2 account.
+        tool_path = repo_ctx.which("b2")
+        src_url = "b2://{}/{}".format(bucket, file_path)
+        cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, "."]
     else:
-      fail("Provider not supported: " + provider.capitalize())
+        fail("Provider not supported: " + provider.capitalize())
 
     if tool_path == None:
-      fail("Could not find command line utility for {}".format(provider.capitalize()))
+        fail("Could not find command line utility for {}".format(provider.capitalize()))
 
     # Download.
     repo_ctx.report_progress("Downloading {}.".format(src_url))
@@ -113,7 +113,7 @@ minio_archive = repository_rule(
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "_provider": attr.string(default="minio"),
+        "_provider": attr.string(default = "minio"),
     },
 )
 
@@ -133,7 +133,7 @@ s3_archive = repository_rule(
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "_provider": attr.string(default="s3"),
+        "_provider": attr.string(default = "s3"),
     },
 )
 
@@ -152,7 +152,7 @@ gs_archive = repository_rule(
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "_provider": attr.string(default="google"),
+        "_provider": attr.string(default = "google"),
     },
 )
 
@@ -171,6 +171,6 @@ b2_archive = repository_rule(
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "_provider": attr.string(default="backblaze"),
+        "_provider": attr.string(default = "backblaze"),
     },
 )
