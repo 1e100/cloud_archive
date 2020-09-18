@@ -3,5 +3,5 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 cc_binary(
     name = "hello_minio",
     srcs = ["main.cc"],
-    data = ["@archive_minio//:files"],
+    data = ["@archive_gcloud//:files"],
 )

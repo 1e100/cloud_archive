@@ -1,12 +1,19 @@
 # Cloud archive
 
-This `WORKSPACE` rule for Google Bazel lets you securely download private
-workspace dependencies from S3 or Minio.
+This set of `WORKSPACE` rules for Bazel lets you securely download private
+workspace dependencies from Google Cloud Storage, S3, Minio, or Backblaze B2.
+This can be useful when pulling data, code, and binary dependencies from these
+storage backends into your Bazel build.
 
 ## Requirements
 
 This currently only works on Linux, although adapting it to macOS and Windows
 shouldn't be difficult.
+
+### Google Cloud storage
+
+The `gsutil` command must be installed, and authenticated using `gcloud auth
+login`.
 
 ### S3
 
@@ -20,10 +27,22 @@ multiple profiles.
 Likewise for Minio, `mc` command should be in the path, and Minio should be set
 up such that `mc cp` is able to download the referenced files.
 
+### Backblaze
+
+The `b2` command line utility must be installed and configured to access the
+account as per [the
+instructions](https://www.backblaze.com/b2/docs/quick_command_line.html).
+
 ## Usage
 
 Please refer to `WORKSPACE` file in this repository for an example of how to
 use this.
+
+## How to test
+
+To test, you will need to point the workspace targets to your own cloud
+storage, as well as initialize cloud storage on your machine to the point where
+the typical `cp` command works.
 
 ## Future work
 
