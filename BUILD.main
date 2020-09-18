@@ -1,5 +1,5 @@
 cc_binary(
-    name = "hello_s3",
+    name = "hello_minio",
     srcs = ["main.cc"],
-    data = ["@archive//:files"],
+    data = ["@archive_minio//:files"],
 )

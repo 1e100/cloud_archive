@@ -1,5 +1,6 @@
-""" This rule will download an archive from S3, check sha256, extract it, and
-symlink the provided BUILD file inside. """
+""" This rule will download an archive from Minio, Google Storage, S3 or
+Backblaze, check sha256, extract it, and symlink the provided BUILD file
+inside. """
 
 # License: Apache 2.0
 # Provenance: https://github.com/1e100/cloud_archive
@@ -33,99 +34,73 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
         repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
         repo_ctx.symlink(build_file, "BUILD.bazel")
 
-def s3_archive_download(
-        repo_ctx,
-        s3_bucket,
-        s3_file_path,
-        expected_sha256,
-        strip_prefix = "",
-        build_file = "",
-        build_file_contents = "",
-        aws_profile = None):
-    """ Securely downloads and unpacks an archive from S3, then places a
-    BUILD file inside. """
-    url = "s3://{}/{}".format(s3_bucket, s3_file_path)
-    filename = repo_ctx.path(url).basename
-
-    # Download
-    aws_cli_path = repo_ctx.which("aws")
-    profile_flags = []
-    if aws_profile:
-        profile_flags = ["--profile", aws_profile]
-    aws_cli_cmd = [aws_cli_path] + profile_flags + ["s3", "cp", url, "."]
-    repo_ctx.report_progress("Downloading {}.".format(url))
-    s3_result = repo_ctx.execute(aws_cli_cmd, timeout = 1800)
-    if s3_result.return_code != 0:
-        fail("Failed to download {} from S3: {}".format(url, s3_result.stderr))
-
-    validate_checksum(repo_ctx, url, filename, expected_sha256)
-    extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
-
-def _s3_archive_impl(ctx):
-    s3_archive_download(
-        ctx,
-        ctx.attr.bucket,
-        ctx.attr.file_path,
-        ctx.attr.sha256,
-        strip_prefix = ctx.attr.strip_prefix,
-        build_file = ctx.attr.build_file,
-        build_file_contents = ctx.attr.build_file_contents,
-        aws_profile = ctx.attr.aws_profile,
-    )
-
-s3_archive = repository_rule(
-    implementation = _s3_archive_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "S3 bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "aws_profile": attr.string(doc = "AWS profile to use for authentication"),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "build_file": attr.label(
-            allow_single_file = True,
-            doc = "BUILD file for the unpacked archive",
-        ),
-        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
-        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-    },
-)
-
-def minio_archive_download(
+def cloud_archive_download(
         repo_ctx,
         file_path,
         expected_sha256,
+        provider,
+        bucket = "",
         strip_prefix = "",
         build_file = "",
-        build_file_contents = ""):
+        build_file_contents = "",
+        profile = ""):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
 
-    # Download
-    minio_cli_path = repo_ctx.which("mc")
-    minio_cli_cmd = [minio_cli_path] + ["cp", "-q", file_path, "."]
-    repo_ctx.report_progress("Downloading {}.".format(file_path))
-    minio_result = repo_ctx.execute(minio_cli_cmd, timeout = 1800)
-    if minio_result.return_code != 0:
-        fail("Failed to download {} from Minio: {}".format(file_path, minio_result.stderr))
+    # Download tooling is pretty similar, but commands are different. Note that
+    # Minio does not support bucket per se. The path is expected to contain what
+    # you'd normally feed into `mc`.
+    if provider == "minio":
+      tool_path = repo_ctx.which("mc")
+      src_url = file_path
+      cmd = [tool_path, "cp", "-q", src_url, "."]
+    elif provider == "google":
+      tool_path = repo_ctx.which("gsutil")
+      src_url = "gs://{}/{}".format(bucket, file_path)
+      cmd = [tool_path, "cp", src_url, "."]
+    elif provider == "s3":
+      tool_path = repo_ctx.which("aws")
+      extra_flags = ["--profile", profile] if profile else []
+      src_url = "s3://{}/{}".format(bucket, file_path)
+      cmd = [tool_path] + extra_flags + ["s3", "cp", src_url, "."]
+    elif provider == "backblaze":
+      # NOTE: currently untested, as I don't have a B2 account.
+      tool_path = repo_ctx.which("b2")
+      src_url = "b2://{}/{}".format(bucket, file_path)
+      cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, "."]
+    else:
+      fail("Provider not supported: " + provider.capitalize())
 
+    if tool_path == None:
+      fail("Could not find command line utility for {}".format(provider.capitalize()))
+
+    # Download.
+    repo_ctx.report_progress("Downloading {}.".format(src_url))
+    result = repo_ctx.execute(cmd, timeout = 1800)
+    if result.return_code != 0:
+        fail("Failed to download {} from {}: {}".format(src_url, provider.capitalize(), result.stderr))
+
+    # Verify.
+    filename = repo_ctx.path(src_url).basename
     validate_checksum(repo_ctx, file_path, filename, expected_sha256)
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
 
-def _minio_archive_impl(ctx):
-    minio_archive_download(
+def _cloud_archive_impl(ctx):
+    cloud_archive_download(
         ctx,
         ctx.attr.file_path,
         ctx.attr.sha256,
+        provider = ctx.attr._provider,
         strip_prefix = ctx.attr.strip_prefix,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
+        profile = ctx.attr.profile if hasattr(ctx.attr, "profile") else "",
+        bucket = ctx.attr.bucket if hasattr(ctx.attr, "bucket") else "",
     )
 
 minio_archive = repository_rule(
-    implementation = _minio_archive_impl,
+    implementation = _cloud_archive_impl,
     attrs = {
         "file_path": attr.string(
             mandatory = True,
@@ -138,5 +113,64 @@ minio_archive = repository_rule(
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "_provider": attr.string(default="minio"),
+    },
+)
+
+s3_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = {
+        "bucket": attr.string(mandatory = True, doc = "Bucket name"),
+        "file_path": attr.string(
+            mandatory = True,
+            doc = "Relative path to the archive file within the bucket",
+        ),
+        "profile": attr.string(doc = "Profile to use for authentication."),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
+        "build_file": attr.label(
+            allow_single_file = True,
+            doc = "BUILD file for the unpacked archive",
+        ),
+        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "_provider": attr.string(default="s3"),
+    },
+)
+
+gs_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = {
+        "bucket": attr.string(mandatory = True, doc = "Google Storage bucket name"),
+        "file_path": attr.string(
+            mandatory = True,
+            doc = "Relative path to the archive file within the bucket",
+        ),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
+        "build_file": attr.label(
+            allow_single_file = True,
+            doc = "BUILD file for the unpacked archive",
+        ),
+        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "_provider": attr.string(default="google"),
+    },
+)
+
+b2_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = {
+        "bucket": attr.string(mandatory = True, doc = "Backblaze B2 bucket name"),
+        "file_path": attr.string(
+            mandatory = True,
+            doc = "Relative path to the archive file within the bucket",
+        ),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
+        "build_file": attr.label(
+            allow_single_file = True,
+            doc = "BUILD file for the unpacked archive",
+        ),
+        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "_provider": attr.string(default="backblaze"),
     },
 )

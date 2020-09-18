@@ -1,10 +1,10 @@
 #include <cstdio>
 
 int main() {
-  printf("S3 file contents:\n");
+  printf("File contents:\n");
   size_t bytes_read = 0;
   char buf[256];
-  FILE* f = fopen("external/archive/cloud_archive_test.txt", "r");
+  FILE* f = fopen("external/archive_minio/cloud_archive_test.txt", "r");
   if (f == nullptr) {
     fprintf(stderr, "Failed to open file.");
     return 1;
