@@ -1,0 +1,6 @@
+diff --color -ruN ./dir2/dir3/text3.txt ../dir1.mod/dir2/dir3/text3.txt
+--- ./dir2/dir3/text3.txt	2021-06-18 21:05:46.526267687 -0700
++++ ../dir1.mod/dir2/dir3/text3.txt	2021-06-18 22:21:40.669997759 -0700
+@@ -1 +1 @@
+-lazy dog.
++lazy bear.
