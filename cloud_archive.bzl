@@ -22,7 +22,7 @@ def validate_checksum(repo_ctx, url, local_path, expected_sha256):
 
 def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_contents):
     bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
-    if local_path.endswith(".tar.zst") or local_path.endswith(".tar.zstd"):
+    if local_path.endswith(".tar.zst") or local_path.endswith(".tzst"):
         # Recent TAR supports zstd, if the compressor is installed.
         zst_path = repo_ctx.which("zstd")
         if zst_path == None:
