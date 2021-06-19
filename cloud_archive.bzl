@@ -141,7 +141,7 @@ def cloud_archive_download(
                 patch_cmd = [patch_path] + patch_args + ["-i", patch]
                 result = repo_ctx.execute(patch_cmd)
                 if result.return_code != 0:
-                    fail("Patch {} failed to apply.")
+                    fail("Patch {} failed to apply.".format(patch))
 
 def _cloud_archive_impl(ctx):
     cloud_archive_download(
