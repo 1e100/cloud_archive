@@ -21,12 +21,37 @@ def validate_checksum(repo_ctx, url, local_path, expected_sha256):
         ))
 
 def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_contents):
-    # Extract the downloaded archive.
-    repo_ctx.extract(local_path, stripPrefix = strip_prefix)
+    bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
+    if local_path.endswith(".tar.zst") or local_path.endswith(".tar.zstd"):
+        # Recent TAR supports zstd, if the compressor is installed.
+        zst_path = repo_ctx.which("zstd")
+        if zst_path == None:
+            fail("To decompress .tar.zst, install zstd.")
+        tar_path = repo_ctx.which("tar")
+        if tar_path == None:
+            fail("To decompress .tar.zst, install tar.")
+        extra_tar_params = []
+        if strip_prefix != None and strip_prefix:
+            # Trick: we need to extract a subdir, and remove its components
+            # from the path. We do so via `tar xvf file.tar.zst sub/dir
+            # --strip-components=N`. Here we figure out the N.
+            num_components = 0
+            prefix = strip_prefix.strip("/")
+            for c in prefix.split("/"):
+                if len(c) > 0:
+                    num_components += 1
+            extra_tar_params = [prefix, "--strip-components=" + str(num_components)]
+
+        # Decompress with tar, piping through zstd internally, and stripping prefix
+        # if requested.
+        tar_cmd = [tar_path, "-x", "-f", local_path] + extra_tar_params
+        repo_ctx.execute(tar_cmd)
+    else:
+        # Extract the downloaded archive using Bazel's built-in decompressors.
+        repo_ctx.extract(local_path, stripPrefix = strip_prefix)
 
     # Provide external BUILD file if requested; `build_file_contents` takes
     # priority.
-    bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
     if build_file_contents:
         repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
         repo_ctx.file("BUILD.bazel", build_file_contents, executable = False)
@@ -39,6 +64,8 @@ def cloud_archive_download(
         file_path,
         expected_sha256,
         provider,
+        patches,
+        patch_args,
         bucket = "",
         strip_prefix = "",
         build_file = "",
@@ -84,7 +111,37 @@ def cloud_archive_download(
     # Verify.
     filename = repo_ctx.path(src_url).basename
     validate_checksum(repo_ctx, file_path, filename, expected_sha256)
+
+    # Extract
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
+
+    # If patches are provided, apply them.
+    if patches != None and len(patches) > 0:
+        patches = [str(repo_ctx.path(patch)) for patch in patches]
+
+        # Built in Bazel patch only supports -pN or no parameters at all, so we
+        # determine if we can use the built in patch.
+        only_strip_param = (patch_args != None and
+                            len(patch_args) == 1 and
+                            patch_args[0].startswith("-p") and
+                            patch_args[0][2:].isdigit())
+        strip_n = 0
+        if only_strip_param:
+            strip_n = int(patch_args[0][2])
+
+        if patch_args == None or only_strip_param:
+            # OK to use built-in patch.
+            for patch in patches:
+                repo_ctx.patch(patch, strip = strip_n)
+        else:
+            # Must use extrenal patch. Note that this hasn't been tested, so it
+            # might not work. If it's busted, please send a PR.
+            patch_path = repo_ctx.which("patch")
+            for patch in patches:
+                patch_cmd = [patch_path] + patch_args + ["-i", patch]
+                result = repo_ctx.execute(patch_cmd)
+                if result.return_code != 0:
+                    fail("Patch {} failed to apply.")
 
 def _cloud_archive_impl(ctx):
     cloud_archive_download(
@@ -92,6 +149,8 @@ def _cloud_archive_impl(ctx):
         ctx.attr.file_path,
         ctx.attr.sha256,
         provider = ctx.attr._provider,
+        patches = ctx.attr.patches,
+        patch_args = ctx.attr.patch_args,
         strip_prefix = ctx.attr.strip_prefix,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
@@ -112,6 +171,8 @@ minio_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "minio"),
     },
@@ -132,6 +193,8 @@ s3_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "s3"),
     },
@@ -151,6 +214,8 @@ gs_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "google"),
     },
@@ -170,6 +235,8 @@ b2_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "backblaze"),
     },

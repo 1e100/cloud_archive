@@ -1,7 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = "hello_minio",
+    name = "hello_world",
     srcs = ["main.cc"],
-    data = ["@archive_gcloud//:files"],
+    data = [
+        "@archive_gcloud_gz//:files",
+        "@archive_gcloud_zstd//:files",
+        "@archive_gcloud_zstd_patch//:files",
+        "@archive_gcloud_zstd_strip2//:files",
+    ],
 )
