@@ -127,7 +127,7 @@ def cloud_archive_download(
                             patch_args[0][2:].isdigit())
         strip_n = 0
         if only_strip_param:
-            strip_n = int(patch_args[0][2])
+            strip_n = int(patch_args[0][2:])
 
         if patch_args == None or only_strip_param:
             # OK to use built-in patch.
