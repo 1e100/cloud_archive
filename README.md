@@ -5,6 +5,11 @@ workspace dependencies from Google Cloud Storage, S3, Minio, or Backblaze B2.
 This can be useful when pulling data, code, and binary dependencies from these
 storage backends into your Bazel build.
 
+In addition, these rules are support the much faster Zstandard compression for
+`*.tar.zst` and `*.tzst` files, assuming your `tar` supports `zstd` and `zstd`
+is installed. If not you see errors, try `sudo apt install zstd` before you
+file an issue, and make sure your `tar` is fresh enough to support this.
+
 ## Usage
 ```starlark
 load("//:cloud_archive.bzl", "gs_archive")
