@@ -7,9 +7,14 @@ inside. """
 
 def validate_checksum(repo_ctx, url, local_path, expected_sha256):
     # Verify checksum
-    sha256_path = repo_ctx.which("sha256sum")
+    if repo_ctx.os.name == "linux":
+        sha256_cmd = [repo_ctx.which("sha256sum")]
+    elif repo_ctx.os.name in ["mac os x", "darwin"]:
+        sha256_cmd = [repo_ctx.which("shasum"), "-a", "256"]
+    else:
+        fail("Unsupported OS: " + repo_ctx.os.name)
     repo_ctx.report_progress("Checksumming {}.".format(local_path))
-    sha256_result = repo_ctx.execute([sha256_path, local_path])
+    sha256_result = repo_ctx.execute(sha256_cmd + [local_path])
     if sha256_result.return_code != 0:
         fail("Failed to verify checksum: {}".format(sha256_result.stderr))
     sha256 = sha256_result.stdout.split(" ")[0]
@@ -127,7 +132,7 @@ def cloud_archive_download(
                             patch_args[0][2:].isdigit())
         strip_n = 0
         if only_strip_param:
-            strip_n = int(patch_args[0][2:])
+            strip_n = int(patch_args[0][2])
 
         if patch_args == None or only_strip_param:
             # OK to use built-in patch.
