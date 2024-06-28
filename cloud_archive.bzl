@@ -75,7 +75,8 @@ def cloud_archive_download(
         strip_prefix = "",
         build_file = "",
         build_file_contents = "",
-        profile = ""):
+        profile = "",
+        patch_cmds = []):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
@@ -148,6 +149,11 @@ def cloud_archive_download(
                 if result.return_code != 0:
                     fail("Patch {} failed to apply.".format(patch))
 
+    # apply patch_cmds one by one after all patches have been applied
+    bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
+    for cmd in patch_cmds:
+        repo_ctx.execute([bash_path, "-c", cmd])
+
 def _cloud_archive_impl(ctx):
     cloud_archive_download(
         ctx,
@@ -156,6 +162,7 @@ def _cloud_archive_impl(ctx):
         provider = ctx.attr._provider,
         patches = ctx.attr.patches,
         patch_args = ctx.attr.patch_args,
+        patch_cmds = ctx.attr.patch_cmds,
         strip_prefix = ctx.attr.strip_prefix,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
@@ -178,6 +185,7 @@ minio_archive = repository_rule(
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "minio"),
     },
@@ -200,6 +208,7 @@ s3_archive = repository_rule(
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "s3"),
     },
@@ -221,6 +230,7 @@ gs_archive = repository_rule(
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "google"),
     },
@@ -242,6 +252,7 @@ b2_archive = repository_rule(
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "backblaze"),
     },
