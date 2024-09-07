@@ -76,7 +76,8 @@ def cloud_archive_download(
         build_file = "",
         build_file_contents = "",
         profile = "",
-        patch_cmds = []):
+        patch_cmds = [],
+        file_version = ""):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
@@ -95,8 +96,11 @@ def cloud_archive_download(
     elif provider == "s3":
         tool_path = repo_ctx.which("aws")
         extra_flags = ["--profile", profile] if profile else []
-        src_url = "s3://{}/{}".format(bucket, file_path)
-        cmd = [tool_path] + extra_flags + ["s3", "cp", src_url, "."]
+        bucket_arg = ["--bucket", bucket]
+        file_arg = ["--key", file_path]
+        file_version_arg = ["--version-id", file_version] if file_version else []
+        src_url = filename
+        cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [filename]
     elif provider == "backblaze":
         # NOTE: currently untested, as I don't have a B2 account.
         tool_path = repo_ctx.which("b2")
@@ -168,6 +172,7 @@ def _cloud_archive_impl(ctx):
         build_file_contents = ctx.attr.build_file_contents,
         profile = ctx.attr.profile if hasattr(ctx.attr, "profile") else "",
         bucket = ctx.attr.bucket if hasattr(ctx.attr, "bucket") else "",
+        file_version = ctx.attr.file_version if hasattr(ctx.attr, "file_version") else "",
     )
 
 minio_archive = repository_rule(
@@ -210,6 +215,7 @@ s3_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
         "_provider": attr.string(default = "s3"),
     },
 )
