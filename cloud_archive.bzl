@@ -5,6 +5,8 @@ inside. """
 # License: Apache 2.0
 # Provenance: https://github.com/1e100/cloud_archive
 
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
+
 _CLOUD_FILE_BUILD = """\
 package(default_visibility = ["//visibility:public"])
 
@@ -115,14 +117,11 @@ def cloud_archive_download(
         file_path,
         expected_sha256,
         provider,
-        patches,
-        patch_args,
         bucket = "",
         strip_prefix = "",
         build_file = "",
         build_file_contents = "",
         profile = "",
-        patch_cmds = [],
         file_version = ""):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
@@ -134,38 +133,8 @@ def cloud_archive_download(
     # Extract
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
 
-    # If patches are provided, apply them.
-    if patches != None and len(patches) > 0:
-        patches = [str(repo_ctx.path(patch)) for patch in patches]
-
-        # Built in Bazel patch only supports -pN or no parameters at all, so we
-        # determine if we can use the built in patch.
-        only_strip_param = (patch_args != None and
-                            len(patch_args) == 1 and
-                            patch_args[0].startswith("-p") and
-                            patch_args[0][2:].isdigit())
-        strip_n = 0
-        if only_strip_param:
-            strip_n = int(patch_args[0][2])
-
-        if patch_args == None or only_strip_param:
-            # OK to use built-in patch.
-            for patch in patches:
-                repo_ctx.patch(patch, strip = strip_n)
-        else:
-            # Must use external patch. Note that this hasn't been tested, so it
-            # might not work. If it's busted, please send a PR.
-            patch_path = repo_ctx.which("patch")
-            for patch in patches:
-                patch_cmd = [patch_path] + patch_args + ["-i", patch]
-                result = repo_ctx.execute(patch_cmd)
-                if result.return_code != 0:
-                    fail("Patch {} failed to apply.".format(patch))
-
-    # apply patch_cmds one by one after all patches have been applied
-    bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
-    for cmd in patch_cmds:
-        repo_ctx.execute([bash_path, "-c", cmd])
+    # Patch
+    patch(repo_ctx)
 
 def cloud_download(
         repo_ctx,
@@ -238,9 +207,6 @@ def _cloud_archive_impl(ctx):
         ctx.attr.file_path,
         ctx.attr.sha256,
         provider = ctx.attr._provider,
-        patches = ctx.attr.patches,
-        patch_args = ctx.attr.patch_args,
-        patch_cmds = ctx.attr.patch_cmds,
         strip_prefix = ctx.attr.strip_prefix,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
