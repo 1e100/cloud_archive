@@ -34,7 +34,7 @@ def validate_checksum(repo_ctx, url, local_path, expected_sha256):
             sha256,
         ))
 
-def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_contents):
+def extract_archive(repo_ctx, local_path, strip_prefix, add_prefix, build_file, build_file_contents):
     bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
     if local_path.endswith(".tar.zst") or local_path.endswith(".tzst"):
         # Recent TAR supports zstd, if the compressor is installed.
@@ -55,14 +55,15 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
                 if len(c) > 0:
                     num_components += 1
             extra_tar_params = [prefix, "--strip-components=" + str(num_components)]
-
+        if add_prefix:
+            extra_tar_params += ["-C", add_prefix]
         # Decompress with tar, piping through zstd internally, and stripping prefix
         # if requested.
         tar_cmd = [tar_path, "-x", "-f", local_path] + extra_tar_params
         repo_ctx.execute(tar_cmd)
     else:
         # Extract the downloaded archive using Bazel's built-in decompressors.
-        repo_ctx.extract(local_path, stripPrefix = strip_prefix)
+        repo_ctx.extract(local_path, output = add_prefix, stripPrefix = strip_prefix)
 
     # Provide external BUILD file if requested; `build_file_contents` takes
     # priority.
@@ -121,6 +122,8 @@ def cloud_archive_download(
         patch_args,
         bucket = "",
         strip_prefix = "",
+        add_prefix = "",
+        type = "",
         build_file = "",
         build_file_contents = "",
         profile = "",
@@ -128,13 +131,28 @@ def cloud_archive_download(
         file_version = ""):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
-    filename = repo_ctx.path(file_path).basename
+    downloaded_file_path = file_path
+    if type:
+        valid_extensions = ["zip", "jar", "war", "aar", "tar", "tar.gz", "tgz", "tar.xz", "txz", "tar.zst", "tzst", "tar.bz2", "ar", "deb"]
+        if type not in valid_extensions:
+            fail("Invalid archive type: {}".format(type))
+        downloaded_file_path = downloaded_file_path + "." + type
+    filename = repo_ctx.path(downloaded_file_path).basename
 
     # Download
-    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version)
+    cloud_download(
+        repo_ctx,
+        file_path,
+        expected_sha256,
+        provider,
+        bucket,
+        profile,
+        file_version,
+        downloaded_file_path,
+    )
 
     # Extract
-    extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
+    extract_archive(repo_ctx, filename, strip_prefix, add_prefix, build_file, build_file_contents)
 
     # If patches are provided, apply them.
     if patches != None and len(patches) > 0:
@@ -244,6 +262,8 @@ def _cloud_archive_impl(ctx):
         patch_args = ctx.attr.patch_args,
         patch_cmds = ctx.attr.patch_cmds,
         strip_prefix = ctx.attr.strip_prefix,
+        add_prefix = ctx.attr.add_prefix,
+        type = ctx.attr.type,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
         profile = ctx.attr.profile if hasattr(ctx.attr, "profile") else "",
@@ -281,10 +301,27 @@ minio_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "type": attr.string(
+            doc = """The archive type of the downloaded file.
+
+By default, the archive type is determined from the file extension of the
+URL. If the file has no extension, you can explicitly specify one of the
+following: `"zip"`, `"jar"`, `"war"`, `"aar"`, `"tar"`, `"tar.gz"`, `"tgz"`,
+`"tar.xz"`, `"txz"`, `"tar.zst"`, `"tzst"`, `"tar.bz2"`, `"ar"`, or `"deb"`.""",
+        ),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(
+            default = "",
+            doc = """Destination directory relative to the repository directory.
+
+The archive will be unpacked into this directory, after applying `strip_prefix`
+(if any) to the file paths within the archive. For example, file
+`foo-1.2.3/src/foo.h` will be unpacked to `bar/src/foo.h` if `add_prefix = "bar"`
+and `strip_prefix = "foo-1.2.3"`.""",
+        ),
         "_provider": attr.string(default = "minio"),
     },
 )
@@ -322,10 +359,27 @@ s3_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "type": attr.string(
+            doc = """The archive type of the downloaded file.
+
+By default, the archive type is determined from the file extension of the
+URL. If the file has no extension, you can explicitly specify one of the
+following: `"zip"`, `"jar"`, `"war"`, `"aar"`, `"tar"`, `"tar.gz"`, `"tgz"`,
+`"tar.xz"`, `"txz"`, `"tar.zst"`, `"tzst"`, `"tar.bz2"`, `"ar"`, or `"deb"`.""",
+        ),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(
+            default = "",
+            doc = """Destination directory relative to the repository directory.
+
+The archive will be unpacked into this directory, after applying `strip_prefix`
+(if any) to the file paths within the archive. For example, file
+`foo-1.2.3/src/foo.h` will be unpacked to `bar/src/foo.h` if `add_prefix = "bar"`
+and `strip_prefix = "foo-1.2.3"`.""",
+        ),
         "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
         "_provider": attr.string(default = "s3"),
     },
@@ -363,10 +417,27 @@ gs_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "type": attr.string(
+            doc = """The archive type of the downloaded file.
+
+By default, the archive type is determined from the file extension of the
+URL. If the file has no extension, you can explicitly specify one of the
+following: `"zip"`, `"jar"`, `"war"`, `"aar"`, `"tar"`, `"tar.gz"`, `"tgz"`,
+`"tar.xz"`, `"txz"`, `"tar.zst"`, `"tzst"`, `"tar.bz2"`, `"ar"`, or `"deb"`.""",
+        ),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(
+            default = "",
+            doc = """Destination directory relative to the repository directory.
+
+The archive will be unpacked into this directory, after applying `strip_prefix`
+(if any) to the file paths within the archive. For example, file
+`foo-1.2.3/src/foo.h` will be unpacked to `bar/src/foo.h` if `add_prefix = "bar"`
+and `strip_prefix = "foo-1.2.3"`.""",
+        ),
         "_provider": attr.string(default = "google"),
     },
 )
@@ -403,10 +474,27 @@ b2_archive = repository_rule(
             doc = "BUILD file for the unpacked archive",
         ),
         "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "type": attr.string(
+            doc = """The archive type of the downloaded file.
+
+By default, the archive type is determined from the file extension of the
+URL. If the file has no extension, you can explicitly specify one of the
+following: `"zip"`, `"jar"`, `"war"`, `"aar"`, `"tar"`, `"tar.gz"`, `"tgz"`,
+`"tar.xz"`, `"txz"`, `"tar.zst"`, `"tzst"`, `"tar.bz2"`, `"ar"`, or `"deb"`.""",
+        ),
         "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(
+            default = "",
+            doc = """Destination directory relative to the repository directory.
+
+The archive will be unpacked into this directory, after applying `strip_prefix`
+(if any) to the file paths within the archive. For example, file
+`foo-1.2.3/src/foo.h` will be unpacked to `bar/src/foo.h` if `add_prefix = "bar"`
+and `strip_prefix = "foo-1.2.3"`.""",
+        ),
         "_provider": attr.string(default = "backblaze"),
     },
 )
