@@ -9,3 +9,5 @@ __pycache__
 xcuserdata/
 .idea
 
+# thrash happens; let it happen for now
+MODULE.bazel.lock

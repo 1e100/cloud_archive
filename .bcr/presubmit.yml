@@ -1,0 +1,10 @@
+matrix:
+  platform:
+    - ubuntu2404
+    - macos
+tasks:
+  verify_targets:
+    name: Verify basic build targets
+    platform: ${{ platform }}
+    build_targets:
+      - '@cloud_archive//...'
