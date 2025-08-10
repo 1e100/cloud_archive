@@ -179,7 +179,7 @@ def cloud_download(
         file_version = "",
         downloaded_file_path = ""):
     """ Securely downloads a file from Minio. """
-    downloaded_file_path = downloaded_file_path or file_path
+    downloaded_file_path = downloaded_file_path or repo_ctx.path(file_path).basename
 
     # Download tooling is pretty similar, but commands are different. Note that
     # Minio does not support bucket per se. The path is expected to contain what
@@ -194,11 +194,11 @@ def cloud_download(
         cmd = [tool_path, "cp", src_url, downloaded_file_path]
     elif provider == "s3":
         tool_path = repo_ctx.which("aws")
+        src_url = file_path
         extra_flags = ["--profile", profile] if profile else []
         bucket_arg = ["--bucket", bucket]
         file_arg = ["--key", file_path]
         file_version_arg = ["--version-id", file_version] if file_version else []
-        src_url = repo_ctx.path(file_path).basename
         cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [downloaded_file_path]
     elif provider == "backblaze":
         # NOTE: currently untested, as I don't have a B2 account.
