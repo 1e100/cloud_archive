@@ -1,0 +1,42 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+py_binary(
+    name = "cloud_archive_test",
+    srcs = ["cloud_archive_test.py"],
+    data = [
+        ":mc_config",
+        "@mc_binary//file",
+    ],
+    deps = [
+        ":minio_server_lib",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+)
+
+filegroup(
+    name = "mc_config",
+    srcs = glob(["mc/**"]),
+)
+
+py_library(
+    name = "minio_server_lib",
+    srcs = ["minio_server.py"],
+    data = [
+        ":testdata",
+        "@minio_binary//file"
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+py_binary(
+    name = "minio_server",
+    srcs = ["minio_server.py"],
+    deps = [":minio_server_lib"],
+)
