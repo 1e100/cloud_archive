@@ -27,33 +27,11 @@ def validate_checksum(repo_ctx, url, local_path, expected_sha256):
 
 def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_contents):
     bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
-    if local_path.endswith(".tar.zst") or local_path.endswith(".tzst"):
-        # Recent TAR supports zstd, if the compressor is installed.
-        zst_path = repo_ctx.which("zstd")
-        if zst_path == None:
-            fail("To decompress .tar.zst, install zstd.")
-        tar_path = repo_ctx.which("tar")
-        if tar_path == None:
-            fail("To decompress .tar.zst, install tar.")
-        extra_tar_params = []
-        if strip_prefix != None and strip_prefix:
-            # Trick: we need to extract a subdir, and remove its components
-            # from the path. We do so via `tar xvf file.tar.zst sub/dir
-            # --strip-components=N`. Here we figure out the N.
-            num_components = 0
-            prefix = strip_prefix.strip("/")
-            for c in prefix.split("/"):
-                if len(c) > 0:
-                    num_components += 1
-            extra_tar_params = [prefix, "--strip-components=" + str(num_components)]
 
-        # Decompress with tar, piping through zstd internally, and stripping prefix
-        # if requested.
-        tar_cmd = [tar_path, "-x", "-f", local_path] + extra_tar_params
-        repo_ctx.execute(tar_cmd)
-    else:
-        # Extract the downloaded archive using Bazel's built-in decompressors.
-        repo_ctx.extract(local_path, stripPrefix = strip_prefix)
+    # Recent TAR supports zstd, if the compressor is installed.
+    # Better, since bazel-5.0 via bazelbuild/bazel#15087 bazel's extract can handle zstd.
+    # Extract the downloaded archive using Bazel's built-in decompressors.
+    repo_ctx.extract(local_path, stripPrefix = strip_prefix)
 
     # Provide external BUILD file if requested; `build_file_contents` takes
     # priority.
