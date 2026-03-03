@@ -168,6 +168,8 @@ def cloud_archive_download(
     bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
     for cmd in patch_cmds:
         repo_ctx.execute([bash_path, "-c", cmd])
+        if result.return_code != 0:
+            fail("Failed to execute {}: {}".format(cmd, result.stderr))
 
 def cloud_download(
         repo_ctx,
