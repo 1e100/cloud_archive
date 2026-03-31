@@ -206,7 +206,7 @@ def cloud_download(
         # NOTE: currently untested, as I don't have a B2 account.
         tool_path = repo_ctx.which("b2")
         src_url = "b2://{}/{}".format(bucket, file_path)
-        cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, downloaded_file_path, "."]
+        cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, downloaded_file_path]
     else:
         fail("Provider not supported: " + provider.capitalize())
 
