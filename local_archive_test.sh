@@ -6,6 +6,9 @@ set -euo pipefail
 PASS=0
 FAIL=0
 
+# Bazel runfiles root for external repositories.
+RUNFILES="${TEST_SRCDIR:-$0.runfiles}"
+
 assert_file_contains() {
     local file="$1"
     local expected="$2"
@@ -27,37 +30,37 @@ assert_file_contains() {
 
 # Test 1: local_file - basic file download + checksum
 assert_file_contains \
-    "external/test_local_file/file/downloaded" \
+    "$RUNFILES/test_local_file/file/downloaded" \
     "Hello from cloud_archive test." \
     "local_file basic"
 
 # Test 2: local_archive with .tar.gz - basic extraction
 assert_file_contains \
-    "external/test_local_archive_gz/cloud_archive_test.txt" \
+    "$RUNFILES/test_local_archive_gz/cloud_archive_test.txt" \
     "Hello from cloud_archive test." \
     "local_archive tar.gz extraction"
 
 # Test 3: local_archive with .tar.zst + strip_prefix=dir1
 assert_file_contains \
-    "external/test_local_archive_zstd/dir2/dir3/text3.txt" \
+    "$RUNFILES/test_local_archive_zstd/dir2/dir3/text3.txt" \
     "The quick brown fox jumps over the lazy dog." \
     "local_archive tar.zst + strip_prefix"
 
 # Test 4: local_archive with .tar.zst + strip_prefix=dir1/dir2
 assert_file_contains \
-    "external/test_local_archive_zstd_strip2/dir3/text3.txt" \
+    "$RUNFILES/test_local_archive_zstd_strip2/dir3/text3.txt" \
     "The quick brown fox jumps over the lazy dog." \
     "local_archive tar.zst + multi-level strip_prefix"
 
 # Test 5: local_archive with patch applied
 assert_file_contains \
-    "external/test_local_archive_patch/dir2/dir3/text3.txt" \
+    "$RUNFILES/test_local_archive_patch/dir2/dir3/text3.txt" \
     "The quick brown fox jumps over the lazy bear." \
     "local_archive patch"
 
 # Test 6: local_archive with patch_cmds
 assert_file_contains \
-    "external/test_local_archive_patch_cmds/dir2/dir3/text3.txt" \
+    "$RUNFILES/test_local_archive_patch_cmds/dir2/dir3/text3.txt" \
     "patched by cmd" \
     "local_archive patch_cmds"
 
