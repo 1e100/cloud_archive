@@ -188,14 +188,25 @@ def cloud_download(
     # you'd normally feed into `mc`.
     if provider == "minio":
         tool_path = repo_ctx.which("mc")
+    elif provider == "google":
+        tool_path = repo_ctx.which("gsutil")
+    elif provider == "s3":
+        tool_path = repo_ctx.which("aws")
+    elif provider == "backblaze":
+        tool_path = repo_ctx.which("b2")
+    else:
+        fail("Provider not supported: " + provider.capitalize())
+
+    if tool_path == None:
+        fail("Could not find command line utility for {}".format(provider.capitalize()))
+
+    if provider == "minio":
         src_url = file_path
         cmd = [tool_path, "cp", "-q", src_url, downloaded_file_path]
     elif provider == "google":
-        tool_path = repo_ctx.which("gsutil")
         src_url = "gs://{}/{}".format(bucket, file_path)
         cmd = [tool_path, "cp", src_url, downloaded_file_path]
     elif provider == "s3":
-        tool_path = repo_ctx.which("aws")
         extra_flags = ["--profile", profile] if profile else []
         bucket_arg = ["--bucket", bucket]
         file_arg = ["--key", file_path]
@@ -204,14 +215,8 @@ def cloud_download(
         cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [downloaded_file_path]
     elif provider == "backblaze":
         # NOTE: currently untested, as I don't have a B2 account.
-        tool_path = repo_ctx.which("b2")
         src_url = "b2://{}/{}".format(bucket, file_path)
         cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, downloaded_file_path]
-    else:
-        fail("Provider not supported: " + provider.capitalize())
-
-    if tool_path == None:
-        fail("Could not find command line utility for {}".format(provider.capitalize()))
 
     # Download.
     repo_ctx.report_progress("Downloading {}.".format(src_url))
