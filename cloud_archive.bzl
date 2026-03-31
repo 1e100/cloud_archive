@@ -59,7 +59,9 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
         # Decompress with tar, piping through zstd internally, and stripping prefix
         # if requested.
         tar_cmd = [tar_path, "-x", "-f", local_path] + extra_tar_params
-        repo_ctx.execute(tar_cmd)
+        result = repo_ctx.execute(tar_cmd)
+        if result.return_code != 0:
+            fail("Failed to extract {}: {}".format(local_path, result.stderr))
     else:
         # Extract the downloaded archive using Bazel's built-in decompressors.
         repo_ctx.extract(local_path, stripPrefix = strip_prefix)
