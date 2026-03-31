@@ -2,6 +2,12 @@ module(name = "cloud_archive")
 
 bazel_dep(name = "rules_cc", version = "0.1.1")
 
+# Register the cloud_archive extension with default (empty) tool config.
+# Consumers can override tools via cloud_archive.configure() in their own
+# MODULE.bazel — see extensions.bzl for details.
+cloud_archive = use_extension("//:extensions.bzl", "cloud_archive")
+use_repo(cloud_archive, "cloud_archive_tools")
+
 # --- Local test targets (no cloud backend required) ---
 
 local_file = use_repo_rule("//:cloud_archive.bzl", "local_file")

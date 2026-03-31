@@ -54,7 +54,9 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
 _TOOL_TARGET_DOC = (
     "Optional label pointing to a pre-built CLI binary (e.g. @my_awscli//:aws). " +
     "When set, this binary is used instead of searching $PATH. The referenced " +
-    "repository is fetched automatically before this rule executes."
+    "repository is fetched automatically before this rule executes. " +
+    "Prefer the module extension (cloud_archive.configure) to set this once " +
+    "for all rules; this per-rule attribute takes precedence over the extension."
 )
 
 _PROVIDER_TOOL_NAMES = {
@@ -64,15 +66,33 @@ _PROVIDER_TOOL_NAMES = {
     "backblaze": "b2",
 }
 
-def _resolve_tool(repo_ctx, provider, tool_target):
+def _read_tools_config(repo_ctx):
+    """Read the module-level tool configuration from @cloud_archive_tools.
+
+    Returns a dict mapping provider names to label strings, e.g.
+    {"s3": "@@my_awscli~1.0//:aws"}.  Returns {} if the config repo
+    is not available (e.g. WORKSPACE-only usage).
+    """
+    config_label = Label("@cloud_archive_tools//:config.json")
+    config_path = repo_ctx.path(config_label)
+    return json.decode(repo_ctx.read(config_path))
+
+def _resolve_tool(repo_ctx, provider, tool_target = None):
     """Returns a path to the CLI binary for the given provider.
 
-    If tool_target is set, resolves the label to a path (which causes
-    Bazel to fetch that repository first). Otherwise falls back to
-    repo_ctx.which() on $PATH.
+    Resolution order:
+      1. Per-rule tool_target attribute (if set).
+      2. Module-level config from cloud_archive.configure() extension.
+      3. $PATH lookup via repo_ctx.which().
     """
     if tool_target:
         return repo_ctx.path(tool_target)
+
+    # Check module-level config.
+    config = _read_tools_config(repo_ctx)
+    label_str = config.get(provider)
+    if label_str:
+        return repo_ctx.path(Label(label_str))
 
     name = _PROVIDER_TOOL_NAMES.get(provider)
     if not name:
@@ -80,7 +100,7 @@ def _resolve_tool(repo_ctx, provider, tool_target):
     path = repo_ctx.which(name)
     if path == None:
         fail("Could not find '{}' on $PATH for provider {}. ".format(name, provider) +
-             "Set tool_target to a label providing the binary instead.")
+             "Set tool_target or use cloud_archive.configure() to provide the binary.")
     return path
 
 def cloud_file_download(
