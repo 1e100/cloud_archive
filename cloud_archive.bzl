@@ -51,6 +51,38 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
         repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
         repo_ctx.symlink(build_file, "BUILD.bazel")
 
+_TOOL_TARGET_DOC = (
+    "Optional label pointing to a pre-built CLI binary (e.g. @my_awscli//:aws). " +
+    "When set, this binary is used instead of searching $PATH. The referenced " +
+    "repository is fetched automatically before this rule executes."
+)
+
+_PROVIDER_TOOL_NAMES = {
+    "minio": "mc",
+    "google": "gsutil",
+    "s3": "aws",
+    "backblaze": "b2",
+}
+
+def _resolve_tool(repo_ctx, provider, tool_target):
+    """Returns a path to the CLI binary for the given provider.
+
+    If tool_target is set, resolves the label to a path (which causes
+    Bazel to fetch that repository first). Otherwise falls back to
+    repo_ctx.which() on $PATH.
+    """
+    if tool_target:
+        return repo_ctx.path(tool_target)
+
+    name = _PROVIDER_TOOL_NAMES.get(provider)
+    if not name:
+        fail("Provider not supported: " + provider)
+    path = repo_ctx.which(name)
+    if path == None:
+        fail("Could not find '{}' on $PATH for provider {}. ".format(name, provider) +
+             "Set tool_target to a label providing the binary instead.")
+    return path
+
 def cloud_file_download(
         repo_ctx,
         file_path,
@@ -60,7 +92,8 @@ def cloud_file_download(
         profile = "",
         file_version = "",
         downloaded_file_path = "downloaded",
-        executable = False):
+        executable = False,
+        tool_target = None):
     """ Securely downloads a file from Minio, then places a BUILD file inside. """
     repo_root = repo_ctx.path(".")
     forbidden_files = [
@@ -86,6 +119,7 @@ def cloud_file_download(
         profile,
         file_version,
         "file/" + downloaded_file_path,
+        tool_target = tool_target,
     )
     if executable:
         repo_ctx.execute(["chmod", "+x", "file/" + downloaded_file_path])
@@ -100,14 +134,15 @@ def cloud_archive_download(
         build_file = "",
         build_file_contents = "",
         profile = "",
-        file_version = ""):
+        file_version = "",
+        tool_target = None):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
 
     # Download to the basename so extraction can find the file, even when
     # file_path contains directory components (e.g. minio paths).
-    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename)
+    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename, tool_target = tool_target)
 
     # Extract
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
@@ -124,8 +159,9 @@ def cloud_download(
         bucket = "",
         profile = "",
         file_version = "",
-        downloaded_file_path = ""):
-    """ Securely downloads a file from Minio. """
+        downloaded_file_path = "",
+        tool_target = None):
+    """ Securely downloads a file from a cloud provider. """
     downloaded_file_path = downloaded_file_path or file_path
 
     # Download tooling is pretty similar, but commands are different. Note that
@@ -140,19 +176,7 @@ def cloud_download(
         src_url = file_path
         cmd = [tool_path, file_path, downloaded_file_path]
     else:
-        if provider == "minio":
-            tool_path = repo_ctx.which("mc")
-        elif provider == "google":
-            tool_path = repo_ctx.which("gsutil")
-        elif provider == "s3":
-            tool_path = repo_ctx.which("aws")
-        elif provider == "backblaze":
-            tool_path = repo_ctx.which("b2")
-        else:
-            fail("Provider not supported: " + provider.capitalize())
-
-        if tool_path == None:
-            fail("Could not find command line utility for {}".format(provider.capitalize()))
+        tool_path = _resolve_tool(repo_ctx, provider, tool_target)
 
         if provider == "minio":
             src_url = file_path
@@ -216,6 +240,7 @@ def _cloud_file_impl(ctx):
         file_version = ctx.attr.file_version if hasattr(ctx.attr, "file_version") else "",
         downloaded_file_path = ctx.attr.downloaded_file_path,
         executable = ctx.attr.executable,
+        tool_target = ctx.attr.tool_target,
     )
 
 def _cloud_archive_impl(ctx):
@@ -230,6 +255,7 @@ def _cloud_archive_impl(ctx):
         profile = ctx.attr.profile if hasattr(ctx.attr, "profile") else "",
         bucket = ctx.attr.bucket if hasattr(ctx.attr, "bucket") else "",
         file_version = ctx.attr.file_version if hasattr(ctx.attr, "file_version") else "",
+        tool_target = ctx.attr.tool_target,
     )
 
 minio_file = repository_rule(
@@ -245,6 +271,7 @@ minio_file = repository_rule(
             doc = "Path assigned to the file downloaded",
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "minio"),
     },
 )
@@ -266,6 +293,7 @@ minio_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "minio"),
     },
 )
@@ -284,6 +312,7 @@ s3_file = repository_rule(
             doc = "Path assigned to the file downloaded",
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "s3"),
     },
 )
@@ -308,6 +337,7 @@ s3_archive = repository_rule(
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "s3"),
     },
 )
@@ -326,6 +356,7 @@ gs_file = repository_rule(
             doc = "Path assigned to the file downloaded",
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "google"),
     },
 )
@@ -348,6 +379,7 @@ gs_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "google"),
     },
 )
@@ -366,6 +398,7 @@ b2_file = repository_rule(
             doc = "Path assigned to the file downloaded",
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "backblaze"),
     },
 )
@@ -388,6 +421,7 @@ b2_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "backblaze"),
     },
 )

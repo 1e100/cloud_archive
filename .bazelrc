@@ -1,3 +1,1 @@
-# This project uses WORKSPACE-based repository rules.
-# Bzlmod migration is not yet done, so re-enable WORKSPACE support.
-common --enable_workspace
+# Bzlmod is the default in Bazel 8+; no --enable_workspace needed.
