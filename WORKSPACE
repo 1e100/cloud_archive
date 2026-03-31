@@ -1,6 +1,58 @@
 workspace(name = "cloud_archive")
 
-load(":cloud_archive.bzl", "gs_archive", "minio_archive", "s3_archive")
+load(":cloud_archive.bzl", "gs_archive", "local_archive", "local_file", "minio_archive", "s3_archive")
+
+# --- Local test targets (no cloud backend required) ---
+
+local_file(
+    name = "test_local_file",
+    sha256 = "7c5fdb91d42da23cf7f42c786b20b770f64643bfd62ad7f52d3ab4c4fd189eff",
+    src = "//testdata:test_file.txt",
+)
+
+local_archive(
+    name = "test_local_archive_gz",
+    build_file = "//:BUILD.archive",
+    sha256 = "e7fefef96c1a5fb3da63966b5dd18ef25ecfb68f5958eaf2c7d339cf7bc9c181",
+    src = "//testdata:test_archive.tar.gz",
+)
+
+local_archive(
+    name = "test_local_archive_zstd",
+    build_file = "//:BUILD.archive",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
+    src = "//testdata:test_archive.tar.zst",
+    strip_prefix = "dir1",
+)
+
+local_archive(
+    name = "test_local_archive_zstd_strip2",
+    build_file = "//:BUILD.archive",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
+    src = "//testdata:test_archive.tar.zst",
+    strip_prefix = "dir1/dir2",
+)
+
+local_archive(
+    name = "test_local_archive_patch",
+    build_file = "//:BUILD.archive",
+    patch_args = ["-p1"],
+    patches = ["//testdata:test.patch"],
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
+    src = "//testdata:test_archive.tar.zst",
+    strip_prefix = "dir1",
+)
+
+local_archive(
+    name = "test_local_archive_patch_cmds",
+    build_file = "//:BUILD.archive",
+    patch_cmds = ["echo 'patched by cmd' > dir2/dir3/text3.txt"],
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
+    src = "//testdata:test_archive.tar.zst",
+    strip_prefix = "dir1",
+)
+
+# --- Cloud targets (require configured backends) ---
 
 s3_archive(
     name = "archive_s3",

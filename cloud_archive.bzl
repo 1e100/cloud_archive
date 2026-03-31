@@ -54,12 +54,14 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
             for c in prefix.split("/"):
                 if len(c) > 0:
                     num_components += 1
-            extra_tar_params = [prefix, "--strip-components=" + str(num_components)]
+            extra_tar_params = ["--strip-components=" + str(num_components), prefix]
 
         # Decompress with tar, piping through zstd internally, and stripping prefix
         # if requested.
         tar_cmd = [tar_path, "-x", "-f", local_path] + extra_tar_params
-        repo_ctx.execute(tar_cmd)
+        result = repo_ctx.execute(tar_cmd)
+        if result.return_code != 0:
+            fail("Failed to extract {}: {}".format(local_path, result.stderr))
     else:
         # Extract the downloaded archive using Bazel's built-in decompressors.
         repo_ctx.extract(local_path, stripPrefix = strip_prefix)
@@ -130,8 +132,9 @@ def cloud_archive_download(
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
 
-    # Download
-    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version)
+    # Download to the basename so extraction can find the file, even when
+    # file_path contains directory components (e.g. minio paths).
+    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename)
 
     # Extract
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
@@ -167,7 +170,7 @@ def cloud_archive_download(
     # apply patch_cmds one by one after all patches have been applied
     bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
     for cmd in patch_cmds:
-        repo_ctx.execute([bash_path, "-c", cmd])
+        result = repo_ctx.execute([bash_path, "-c", cmd])
         if result.return_code != 0:
             fail("Failed to execute {}: {}".format(cmd, result.stderr))
 
@@ -186,41 +189,81 @@ def cloud_download(
     # Download tooling is pretty similar, but commands are different. Note that
     # Minio does not support bucket per se. The path is expected to contain what
     # you'd normally feed into `mc`.
-    if provider == "minio":
-        tool_path = repo_ctx.which("mc")
+    if provider == "local":
+        # Local provider: file_path is an absolute path to a local file.
+        # Just copy it; no external tool needed.
+        tool_path = repo_ctx.which("cp")
+        if tool_path == None:
+            fail("Could not find 'cp' command.")
         src_url = file_path
-        cmd = [tool_path, "cp", "-q", src_url, downloaded_file_path]
-    elif provider == "google":
-        tool_path = repo_ctx.which("gsutil")
-        src_url = "gs://{}/{}".format(bucket, file_path)
-        cmd = [tool_path, "cp", src_url, downloaded_file_path]
-    elif provider == "s3":
-        tool_path = repo_ctx.which("aws")
-        extra_flags = ["--profile", profile] if profile else []
-        bucket_arg = ["--bucket", bucket]
-        file_arg = ["--key", file_path]
-        file_version_arg = ["--version-id", file_version] if file_version else []
-        src_url = repo_ctx.path(file_path).basename
-        cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [downloaded_file_path]
-    elif provider == "backblaze":
-        # NOTE: currently untested, as I don't have a B2 account.
-        tool_path = repo_ctx.which("b2")
-        src_url = "b2://{}/{}".format(bucket, file_path)
-        cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, downloaded_file_path, "."]
+        cmd = [tool_path, file_path, downloaded_file_path]
     else:
-        fail("Provider not supported: " + provider.capitalize())
+        if provider == "minio":
+            tool_path = repo_ctx.which("mc")
+        elif provider == "google":
+            tool_path = repo_ctx.which("gsutil")
+        elif provider == "s3":
+            tool_path = repo_ctx.which("aws")
+        elif provider == "backblaze":
+            tool_path = repo_ctx.which("b2")
+        else:
+            fail("Provider not supported: " + provider.capitalize())
 
-    if tool_path == None:
-        fail("Could not find command line utility for {}".format(provider.capitalize()))
+        if tool_path == None:
+            fail("Could not find command line utility for {}".format(provider.capitalize()))
+
+        if provider == "minio":
+            src_url = file_path
+            cmd = [tool_path, "cp", "-q", src_url, downloaded_file_path]
+        elif provider == "google":
+            src_url = "gs://{}/{}".format(bucket, file_path)
+            cmd = [tool_path, "cp", src_url, downloaded_file_path]
+        elif provider == "s3":
+            extra_flags = ["--profile", profile] if profile else []
+            bucket_arg = ["--bucket", bucket]
+            file_arg = ["--key", file_path]
+            file_version_arg = ["--version-id", file_version] if file_version else []
+            src_url = repo_ctx.path(file_path).basename
+            cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [downloaded_file_path]
+        elif provider == "backblaze":
+            # NOTE: currently untested, as I don't have a B2 account.
+            src_url = "b2://{}/{}".format(bucket, file_path)
+            cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, downloaded_file_path]
 
     # Download.
     repo_ctx.report_progress("Downloading {}.".format(src_url))
     result = repo_ctx.execute(cmd, timeout = 1800)
     if result.return_code != 0:
-        fail("Failed to download {} from {}: {}".format(src_url, provider.capitalize(), result.stderr))
+        fail("Failed to download {} from {}: {}".format(src_url, provider, result.stderr))
 
     # Verify.
     validate_checksum(repo_ctx, file_path, downloaded_file_path, expected_sha256)
+
+def _local_file_impl(ctx):
+    """Implementation of the local file rule."""
+    cloud_file_download(
+        ctx,
+        str(ctx.path(ctx.attr.src)),
+        ctx.attr.sha256,
+        provider = "local",
+        downloaded_file_path = ctx.attr.downloaded_file_path,
+        executable = ctx.attr.executable,
+    )
+
+def _local_archive_impl(ctx):
+    """Implementation of the local archive rule."""
+    cloud_archive_download(
+        ctx,
+        str(ctx.path(ctx.attr.src)),
+        ctx.attr.sha256,
+        provider = "local",
+        patches = ctx.attr.patches,
+        patch_args = ctx.attr.patch_args,
+        patch_cmds = ctx.attr.patch_cmds,
+        strip_prefix = ctx.attr.strip_prefix,
+        build_file = ctx.attr.build_file,
+        build_file_contents = ctx.attr.build_file_contents,
+    )
 
 def _cloud_file_impl(ctx):
     """Implementation of the provider-agnostic, file-based rule."""
@@ -410,5 +453,49 @@ b2_archive = repository_rule(
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
         "_provider": attr.string(default = "backblaze"),
+    },
+)
+
+# The local_file and local_archive rules exist solely for testing. They
+# exercise the full pipeline (checksum, extraction, strip_prefix, patching,
+# patch_cmds, BUILD file generation) without requiring any cloud backend.
+# There is no other reason to use them; for real dependencies, use one of the
+# cloud provider rules above.
+
+local_file = repository_rule(
+    implementation = _local_file_impl,
+    attrs = {
+        "src": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+            doc = "Label of the local file to use.",
+        ),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the file"),
+        "downloaded_file_path": attr.string(
+            default = "downloaded",
+            doc = "Path assigned to the file downloaded",
+        ),
+        "executable": attr.bool(doc = "If the downloaded file should be made executable."),
+    },
+)
+
+local_archive = repository_rule(
+    implementation = _local_archive_impl,
+    attrs = {
+        "src": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+            doc = "Label of the local archive file to use.",
+        ),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
+        "build_file": attr.label(
+            allow_single_file = True,
+            doc = "BUILD file for the unpacked archive",
+        ),
+        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
+        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
     },
 )

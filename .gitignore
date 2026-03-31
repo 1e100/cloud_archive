@@ -5,7 +5,7 @@ bazel-*
 .ipynb_checkpoints/
 __pycache__
 *~
-.bazelrc
+
 xcuserdata/
 .idea
 

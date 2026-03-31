@@ -1,0 +1,3 @@
+# This project uses WORKSPACE-based repository rules.
+# Bzlmod migration is not yet done, so re-enable WORKSPACE support.
+common --enable_workspace
