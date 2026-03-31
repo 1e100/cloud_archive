@@ -10,3 +10,16 @@ cc_binary(
         "@archive_gcloud_zstd_strip2//:files",
     ],
 )
+
+sh_test(
+    name = "local_archive_test",
+    srcs = ["local_archive_test.sh"],
+    data = [
+        "@test_local_file//file:file",
+        "@test_local_archive_gz//:files",
+        "@test_local_archive_zstd//:files",
+        "@test_local_archive_zstd_strip2//:files",
+        "@test_local_archive_patch//:files",
+        "@test_local_archive_patch_cmds//:files",
+    ],
+)
