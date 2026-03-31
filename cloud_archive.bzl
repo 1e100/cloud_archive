@@ -54,7 +54,7 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
             for c in prefix.split("/"):
                 if len(c) > 0:
                     num_components += 1
-            extra_tar_params = [prefix, "--strip-components=" + str(num_components)]
+            extra_tar_params = ["--strip-components=" + str(num_components), prefix]
 
         # Decompress with tar, piping through zstd internally, and stripping prefix
         # if requested.

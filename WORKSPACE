@@ -13,14 +13,14 @@ local_file(
 local_archive(
     name = "test_local_archive_gz",
     build_file = "//:BUILD.archive",
-    sha256 = "d793e5de917902aecfb73937028f5dbd29bc78c6c4bc096b3f59e4d576915eca",
+    sha256 = "e7fefef96c1a5fb3da63966b5dd18ef25ecfb68f5958eaf2c7d339cf7bc9c181",
     src = "//testdata:test_archive.tar.gz",
 )
 
 local_archive(
     name = "test_local_archive_zstd",
     build_file = "//:BUILD.archive",
-    sha256 = "a403d6f57510c459f2c5c944fbc092e8e7de80900dd7c112838557a0e8e02d5f",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
     src = "//testdata:test_archive.tar.zst",
     strip_prefix = "dir1",
 )
@@ -28,7 +28,7 @@ local_archive(
 local_archive(
     name = "test_local_archive_zstd_strip2",
     build_file = "//:BUILD.archive",
-    sha256 = "a403d6f57510c459f2c5c944fbc092e8e7de80900dd7c112838557a0e8e02d5f",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
     src = "//testdata:test_archive.tar.zst",
     strip_prefix = "dir1/dir2",
 )
@@ -38,7 +38,7 @@ local_archive(
     build_file = "//:BUILD.archive",
     patch_args = ["-p1"],
     patches = ["//testdata:test.patch"],
-    sha256 = "a403d6f57510c459f2c5c944fbc092e8e7de80900dd7c112838557a0e8e02d5f",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
     src = "//testdata:test_archive.tar.zst",
     strip_prefix = "dir1",
 )
@@ -47,7 +47,7 @@ local_archive(
     name = "test_local_archive_patch_cmds",
     build_file = "//:BUILD.archive",
     patch_cmds = ["echo 'patched by cmd' > dir2/dir3/text3.txt"],
-    sha256 = "a403d6f57510c459f2c5c944fbc092e8e7de80900dd7c112838557a0e8e02d5f",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
     src = "//testdata:test_archive.tar.zst",
     strip_prefix = "dir1",
 )
