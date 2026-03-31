@@ -130,8 +130,9 @@ def cloud_archive_download(
     BUILD file inside. """
     filename = repo_ctx.path(file_path).basename
 
-    # Download
-    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version)
+    # Download to the basename so extraction can find the file, even when
+    # file_path contains directory components (e.g. minio paths).
+    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename)
 
     # Extract
     extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
