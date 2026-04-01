@@ -21,6 +21,8 @@ sh_test(
         "@test_local_archive_zstd_strip2//:files",
         "@test_local_archive_patch//:files",
         "@test_local_archive_patch_cmds//:files",
+        "@test_local_archive_add_prefix//:files",
+        "@test_local_archive_type//:files",
     ],
     deps = ["@bazel_tools//tools/bash/runfiles"],
 )
