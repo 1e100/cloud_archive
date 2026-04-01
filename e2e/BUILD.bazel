@@ -1,0 +1,11 @@
+sh_test(
+    name = "minio_e2e_test",
+    srcs = ["minio_e2e_test.sh"],
+    data = [
+        "@test_minio_file//file:file",
+        "@test_minio_archive_gz//:files",
+        "@test_minio_archive_zstd//:files",
+        "@test_minio_archive_patch//:files",
+    ],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+)

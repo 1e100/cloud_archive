@@ -1,0 +1,1 @@
+# Bzlmod is the default in Bazel 8+; no --enable_workspace needed.
