@@ -1,0 +1,5 @@
+--- a/dir2/dir3/text3.txt
++++ b/dir2/dir3/text3.txt
+@@ -1 +1 @@
+-The quick brown fox jumps over the lazy dog.
++The quick brown fox jumps over the lazy bear.
