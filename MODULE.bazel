@@ -62,6 +62,25 @@ local_archive(
     strip_prefix = "dir1",
 )
 
+# Test: add_prefix with strip_prefix
+local_archive(
+    name = "test_local_archive_add_prefix",
+    build_file = "//:BUILD.archive",
+    sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
+    src = "//testdata:test_archive.tar.zst",
+    strip_prefix = "dir1",
+    add_prefix = "myprefix",
+)
+
+# Test: type attribute with extensionless file
+local_archive(
+    name = "test_local_archive_type",
+    build_file = "//:BUILD.archive",
+    sha256 = "e7fefef96c1a5fb3da63966b5dd18ef25ecfb68f5958eaf2c7d339cf7bc9c181",
+    src = "//testdata:test_archive_no_ext",
+    type = "tar.gz",
+)
+
 # --- Cloud targets (require configured backends) ---
 
 s3_archive = use_repo_rule("//:cloud_archive.bzl", "s3_archive")

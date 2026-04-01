@@ -36,10 +36,10 @@ def validate_checksum(repo_ctx, url, local_path, expected_sha256):
             sha256,
         ))
 
-def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_contents):
+def extract_archive(repo_ctx, local_path, strip_prefix, add_prefix, build_file, build_file_contents):
     # Since Bazel 5.1 (bazelbuild/bazel#15087), repo_ctx.extract handles zstd
     # natively, so no need to shell out to tar/zstd.
-    repo_ctx.extract(local_path, stripPrefix = strip_prefix)
+    repo_ctx.extract(local_path, output = add_prefix or "", stripPrefix = strip_prefix)
 
     # Provide external BUILD file if requested; `build_file_contents` takes
     # priority.
@@ -50,6 +50,20 @@ def extract_archive(repo_ctx, local_path, strip_prefix, build_file, build_file_c
     elif build_file:
         repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
         repo_ctx.symlink(build_file, "BUILD.bazel")
+
+_TYPE_DOC = """The archive type of the downloaded file.
+
+By default, the archive type is determined from the file extension of the
+URL. If the file has no extension, you can explicitly specify one of the
+following: `"zip"`, `"jar"`, `"war"`, `"aar"`, `"tar"`, `"tar.gz"`, `"tgz"`,
+`"tar.xz"`, `"txz"`, `"tar.zst"`, `"tzst"`, `"tar.bz2"`, `"ar"`, or `"deb"`."""
+
+_ADD_PREFIX_DOC = """Destination directory relative to the repository directory.
+
+The archive will be unpacked into this directory, after applying `strip_prefix`
+(if any) to the file paths within the archive. For example, file
+`foo-1.2.3/src/foo.h` will be unpacked to `bar/src/foo.h` if `add_prefix = "bar"`
+and `strip_prefix = "foo-1.2.3"`."""
 
 _TOOL_TARGET_DOC = (
     "Optional label pointing to a pre-built CLI binary (e.g. @my_awscli//:aws). " +
@@ -151,6 +165,8 @@ def cloud_archive_download(
         provider,
         bucket = "",
         strip_prefix = "",
+        add_prefix = "",
+        type = "",
         build_file = "",
         build_file_contents = "",
         profile = "",
@@ -158,14 +174,23 @@ def cloud_archive_download(
         tool_target = None):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
-    filename = repo_ctx.path(file_path).basename
+    downloaded_file_path = file_path
+    if type:
+        valid_extensions = [
+            "zip", "jar", "war", "aar", "tar", "tar.gz", "tgz",
+            "tar.xz", "txz", "tar.zst", "tzst", "tar.bz2", "ar", "deb",
+        ]
+        if type not in valid_extensions:
+            fail("Invalid archive type: {}. Must be one of: {}".format(type, ", ".join(valid_extensions)))
+        downloaded_file_path = downloaded_file_path + "." + type
+    filename = repo_ctx.path(downloaded_file_path).basename
 
     # Download to the basename so extraction can find the file, even when
     # file_path contains directory components (e.g. minio paths).
     cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename, tool_target = tool_target)
 
     # Extract
-    extract_archive(repo_ctx, filename, strip_prefix, build_file, build_file_contents)
+    extract_archive(repo_ctx, filename, strip_prefix, add_prefix, build_file, build_file_contents)
 
     # Patch using Bazel's built-in utility, which reads patches, patch_args,
     # and patch_cmds directly from repo_ctx.attr.
@@ -244,6 +269,8 @@ def _local_archive_impl(ctx):
         ctx.attr.sha256,
         provider = "local",
         strip_prefix = ctx.attr.strip_prefix,
+        add_prefix = ctx.attr.add_prefix,
+        type = ctx.attr.type,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
     )
@@ -270,6 +297,8 @@ def _cloud_archive_impl(ctx):
         ctx.attr.sha256,
         provider = ctx.attr._provider,
         strip_prefix = ctx.attr.strip_prefix,
+        add_prefix = ctx.attr.add_prefix,
+        type = ctx.attr.type,
         build_file = ctx.attr.build_file,
         build_file_contents = ctx.attr.build_file_contents,
         profile = ctx.attr.profile if hasattr(ctx.attr, "profile") else "",
@@ -313,6 +342,8 @@ minio_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+        "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "minio"),
     },
@@ -356,6 +387,8 @@ s3_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+        "type": attr.string(doc = _TYPE_DOC),
         "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "s3"),
@@ -399,6 +432,8 @@ gs_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+        "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "google"),
     },
@@ -441,6 +476,8 @@ b2_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+        "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
         "_provider": attr.string(default = "backblaze"),
     },
@@ -487,5 +524,7 @@ local_archive = repository_rule(
         "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
         "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
         "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+        "type": attr.string(doc = _TYPE_DOC),
     },
 )

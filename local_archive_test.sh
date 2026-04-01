@@ -74,6 +74,18 @@ assert_file_contains \
     "patched by cmd" \
     "local_archive patch_cmds"
 
+# Test 7: local_archive with add_prefix + strip_prefix
+assert_file_contains \
+    "test_local_archive_add_prefix/myprefix/dir2/dir3/text3.txt" \
+    "The quick brown fox jumps over the lazy dog." \
+    "local_archive add_prefix + strip_prefix"
+
+# Test 8: local_archive with type attribute (extensionless file)
+assert_file_contains \
+    "test_local_archive_type/cloud_archive_test.txt" \
+    "Hello from cloud_archive test." \
+    "local_archive type attribute"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
