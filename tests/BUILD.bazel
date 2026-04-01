@@ -1,0 +1,28 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "hello_world",
+    srcs = ["main.cc"],
+    data = [
+        "@archive_gcloud_gz//:files",
+        "@archive_gcloud_zstd//:files",
+        "@archive_gcloud_zstd_patch//:files",
+        "@archive_gcloud_zstd_strip2//:files",
+    ],
+)
+
+sh_test(
+    name = "local_archive_test",
+    srcs = ["local_archive_test.sh"],
+    data = [
+        "@test_local_file//file:file",
+        "@test_local_archive_gz//:files",
+        "@test_local_archive_zstd//:files",
+        "@test_local_archive_zstd_strip2//:files",
+        "@test_local_archive_patch//:files",
+        "@test_local_archive_patch_cmds//:files",
+        "@test_local_archive_add_prefix//:files",
+        "@test_local_archive_type//:files",
+    ],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+)
