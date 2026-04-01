@@ -22,4 +22,5 @@ sh_test(
         "@test_local_archive_patch//:files",
         "@test_local_archive_patch_cmds//:files",
     ],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
 )
