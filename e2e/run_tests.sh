@@ -19,8 +19,20 @@ cd "$SCRIPT_DIR"
 MINIO_RELEASE="RELEASE.2025-02-18T16-25-55Z"
 MC_RELEASE="RELEASE.2025-02-15T12-58-54Z"
 
-MINIO_URL="https://dl.min.io/server/minio/release/linux-amd64/archive/minio.${MINIO_RELEASE}"
-MC_URL="https://dl.min.io/client/mc/release/linux-amd64/archive/mc.${MC_RELEASE}"
+# Detect OS and architecture for the correct MinIO download URLs.
+case "$(uname -s)" in
+    Linux)  MINIO_OS="linux" ;;
+    Darwin) MINIO_OS="darwin" ;;
+    *)      echo "ERROR: Unsupported OS: $(uname -s)"; exit 1 ;;
+esac
+case "$(uname -m)" in
+    x86_64)       MINIO_ARCH="amd64" ;;
+    aarch64|arm64) MINIO_ARCH="arm64" ;;
+    *)            echo "ERROR: Unsupported architecture: $(uname -m)"; exit 1 ;;
+esac
+
+MINIO_URL="https://dl.min.io/server/minio/release/${MINIO_OS}-${MINIO_ARCH}/archive/minio.${MINIO_RELEASE}"
+MC_URL="https://dl.min.io/client/mc/release/${MINIO_OS}-${MINIO_ARCH}/archive/mc.${MC_RELEASE}"
 
 BIN_DIR="$SCRIPT_DIR/bin"
 MINIO_BIN="$BIN_DIR/minio"

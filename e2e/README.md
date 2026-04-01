@@ -5,7 +5,7 @@ Integration tests for `minio_file` and `minio_archive` rules against a real
 
 ## Prerequisites
 
-- Linux x86_64 (MinIO binaries are fetched automatically)
+- Linux or macOS (x86_64 / arm64; MinIO binaries are fetched automatically)
 - `curl` on `$PATH`
 - Bazel (see `../.bazelversion`)
 
