@@ -16,8 +16,8 @@ cd "$SCRIPT_DIR"
 
 # --- Pinned MinIO release versions ---
 # Using versioned archive URLs so checksums remain stable.
-MINIO_RELEASE="RELEASE.2025-02-18T16-25-55Z"
-MC_RELEASE="RELEASE.2025-02-15T12-58-54Z"
+MINIO_RELEASE="RELEASE.2025-06-13T11-33-47Z"
+MC_RELEASE="RELEASE.2025-04-16T18-13-26Z"
 
 # Detect OS and architecture for the correct MinIO download URLs.
 case "$(uname -s)" in
