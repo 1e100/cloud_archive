@@ -7,6 +7,24 @@ inside. """
 
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 
+def _tools_config_impl(rctx):
+    rctx.file("BUILD.bazel", "")
+    rctx.file("config.json", rctx.attr.config_json)
+
+_tools_config = repository_rule(
+    implementation = _tools_config_impl,
+    attrs = {"config_json": attr.string(mandatory = True)},
+)
+
+def cloud_archive_setup():
+    """Initialize cloud_archive for WORKSPACE (non-bzlmod) usage.
+
+    Call this in your WORKSPACE file before declaring any cloud_archive
+    rules.  Bzlmod projects do not need to call this — the module
+    extension handles it automatically.
+    """
+    _tools_config(name = "cloud_archive_tools", config_json = "{}")
+
 _CLOUD_FILE_BUILD = """\
 package(default_visibility = ["//visibility:public"])
 
@@ -84,11 +102,11 @@ def _read_tools_config(repo_ctx):
     """Read the module-level tool configuration from @cloud_archive_tools.
 
     Returns a dict mapping provider names to label strings, e.g.
-    {"s3": "@@my_awscli~1.0//:aws"}.  Returns {} if the config repo
-    is not available (e.g. WORKSPACE-only usage).
+    {"s3": "@@my_awscli~1.0//:aws"}.  Returns {} when the config repo
+    carries an empty configuration (the default for WORKSPACE usage via
+    cloud_archive_setup()).
     """
-    config_label = Label("@cloud_archive_tools//:config.json")
-    config_path = repo_ctx.path(config_label)
+    config_path = repo_ctx.path(repo_ctx.attr._tools_config)
     return json.decode(repo_ctx.read(config_path))
 
 def _resolve_tool(repo_ctx, provider, tool_target = None):
@@ -140,7 +158,7 @@ def cloud_file_download(
     ]
     download_path = repo_ctx.path("file/" + downloaded_file_path)
     if download_path in forbidden_files or not str(download_path).startswith(str(repo_root)):
-        fail("'%s' cannot be used as file_path in http_file" % downloaded_file_path)
+        fail("'%s' cannot be used as downloaded_file_path" % downloaded_file_path)
 
     # This has to be before the download otherwise some tools may fail to create the directory.
     repo_ctx.file("file/BUILD", _CLOUD_FILE_BUILD.format(downloaded_file_path))
@@ -319,6 +337,7 @@ _COMMON_CLOUD_FILE_ATTRS = {
     ),
     "executable": attr.bool(doc = "If the downloaded file should be made executable."),
     "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+    "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
 }
 
 _COMMON_CLOUD_ARCHIVE_ATTRS = {
@@ -335,6 +354,7 @@ _COMMON_CLOUD_ARCHIVE_ATTRS = {
     "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
     "type": attr.string(doc = _TYPE_DOC),
     "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+    "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
 }
 
 def _make_cloud_file_rule(provider, file_path_doc, extra_attrs = None):
@@ -360,11 +380,7 @@ def _make_cloud_archive_rule(provider, file_path_doc, extra_attrs = None):
 _MINIO_PATH_DOC = "Path to the file on minio. Backend needs to be set up locally for this to work."
 _BUCKET_PATH_DOC = "Relative path to the archive file within the bucket"
 
-_S3_BUCKET = {
-    "bucket": attr.string(mandatory = True, doc = "Bucket name"),
-}
-
-_S3_ARCHIVE_EXTRA = {
+_S3_EXTRA = {
     "bucket": attr.string(mandatory = True, doc = "Bucket name"),
     "profile": attr.string(doc = "Profile to use for authentication."),
     "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
@@ -383,8 +399,8 @@ _B2_EXTRA = {
 minio_file = _make_cloud_file_rule("minio", _MINIO_PATH_DOC)
 minio_archive = _make_cloud_archive_rule("minio", _MINIO_PATH_DOC)
 
-s3_file = _make_cloud_file_rule("s3", _BUCKET_PATH_DOC, _S3_BUCKET)
-s3_archive = _make_cloud_archive_rule("s3", _BUCKET_PATH_DOC, _S3_ARCHIVE_EXTRA)
+s3_file = _make_cloud_file_rule("s3", _BUCKET_PATH_DOC, _S3_EXTRA)
+s3_archive = _make_cloud_archive_rule("s3", _BUCKET_PATH_DOC, _S3_EXTRA)
 
 gs_file = _make_cloud_file_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
 gs_archive = _make_cloud_archive_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
