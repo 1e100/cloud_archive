@@ -140,7 +140,7 @@ def cloud_file_download(
     ]
     download_path = repo_ctx.path("file/" + downloaded_file_path)
     if download_path in forbidden_files or not str(download_path).startswith(str(repo_root)):
-        fail("'%s' cannot be used as file_path in http_file" % downloaded_file_path)
+        fail("'%s' cannot be used as downloaded_file_path" % downloaded_file_path)
 
     # This has to be before the download otherwise some tools may fail to create the directory.
     repo_ctx.file("file/BUILD", _CLOUD_FILE_BUILD.format(downloaded_file_path))
