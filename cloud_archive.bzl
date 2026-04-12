@@ -307,181 +307,90 @@ def _cloud_archive_impl(ctx):
         tool_target = ctx.attr.tool_target,
     )
 
-minio_file = repository_rule(
-    implementation = _cloud_file_impl,
-    attrs = {
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Path to the file on minio. Backend needs to be set up locally for this to work.",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "downloaded_file_path": attr.string(
-            default = "downloaded",
-            doc = "Path assigned to the file downloaded",
-        ),
-        "executable": attr.bool(doc="If the downloaded file should be made executable."),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "minio"),
-    },
-)
+# -- Shared attr fragments for cloud provider rules. -------------------------
+# Used by _make_cloud_file_rule / _make_cloud_archive_rule to avoid repeating
+# identical definitions across every provider.
 
-minio_archive = repository_rule(
-    implementation = _cloud_archive_impl,
-    attrs = {
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Path to the file on minio. Backend needs to be set up locally for this to work.",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "build_file": attr.label(
-            allow_single_file = True,
-            doc = "BUILD file for the unpacked archive",
-        ),
-        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
-        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
-        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
-        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
-        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
-        "type": attr.string(doc = _TYPE_DOC),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "minio"),
-    },
-)
+_COMMON_CLOUD_FILE_ATTRS = {
+    "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the file"),
+    "downloaded_file_path": attr.string(
+        default = "downloaded",
+        doc = "Path assigned to the file downloaded",
+    ),
+    "executable": attr.bool(doc = "If the downloaded file should be made executable."),
+    "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+}
 
-s3_file = repository_rule(
-    implementation = _cloud_file_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "downloaded_file_path": attr.string(
-            default = "downloaded",
-            doc = "Path assigned to the file downloaded",
-        ),
-        "executable": attr.bool(doc="If the downloaded file should be made executable."),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "s3"),
-    },
-)
+_COMMON_CLOUD_ARCHIVE_ATTRS = {
+    "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
+    "build_file": attr.label(
+        allow_single_file = True,
+        doc = "BUILD file for the unpacked archive",
+    ),
+    "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
+    "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
+    "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
+    "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
+    "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
+    "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
+    "type": attr.string(doc = _TYPE_DOC),
+    "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+}
 
-s3_archive = repository_rule(
-    implementation = _cloud_archive_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "profile": attr.string(doc = "Profile to use for authentication."),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "build_file": attr.label(
-            allow_single_file = True,
-            doc = "BUILD file for the unpacked archive",
-        ),
-        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
-        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
-        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
-        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
-        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
-        "type": attr.string(doc = _TYPE_DOC),
-        "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "s3"),
-    },
-)
+def _make_cloud_file_rule(provider, file_path_doc, extra_attrs = None):
+    """Create a repository_rule for downloading a single file from a cloud provider."""
+    attrs = {"file_path": attr.string(mandatory = True, doc = file_path_doc)}
+    attrs.update(_COMMON_CLOUD_FILE_ATTRS)
+    if extra_attrs:
+        attrs.update(extra_attrs)
+    attrs["_provider"] = attr.string(default = provider)
+    return repository_rule(implementation = _cloud_file_impl, attrs = attrs)
 
-gs_file = repository_rule(
-    implementation = _cloud_file_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Google Storage bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "downloaded_file_path": attr.string(
-            default = "downloaded",
-            doc = "Path assigned to the file downloaded",
-        ),
-        "executable": attr.bool(doc="If the downloaded file should be made executable."),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "google"),
-    },
-)
+def _make_cloud_archive_rule(provider, file_path_doc, extra_attrs = None):
+    """Create a repository_rule for downloading and extracting an archive from a cloud provider."""
+    attrs = {"file_path": attr.string(mandatory = True, doc = file_path_doc)}
+    attrs.update(_COMMON_CLOUD_ARCHIVE_ATTRS)
+    if extra_attrs:
+        attrs.update(extra_attrs)
+    attrs["_provider"] = attr.string(default = provider)
+    return repository_rule(implementation = _cloud_archive_impl, attrs = attrs)
 
-gs_archive = repository_rule(
-    implementation = _cloud_archive_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Google Storage bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "build_file": attr.label(
-            allow_single_file = True,
-            doc = "BUILD file for the unpacked archive",
-        ),
-        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
-        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
-        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
-        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
-        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
-        "type": attr.string(doc = _TYPE_DOC),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "google"),
-    },
-)
+# -- Provider-specific extra attrs. ------------------------------------------
 
-b2_file = repository_rule(
-    implementation = _cloud_file_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Backblaze B2 bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "downloaded_file_path": attr.string(
-            default = "downloaded",
-            doc = "Path assigned to the file downloaded",
-        ),
-        "executable": attr.bool(doc="If the downloaded file should be made executable."),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "backblaze"),
-    },
-)
+_MINIO_PATH_DOC = "Path to the file on minio. Backend needs to be set up locally for this to work."
+_BUCKET_PATH_DOC = "Relative path to the archive file within the bucket"
 
-b2_archive = repository_rule(
-    implementation = _cloud_archive_impl,
-    attrs = {
-        "bucket": attr.string(mandatory = True, doc = "Backblaze B2 bucket name"),
-        "file_path": attr.string(
-            mandatory = True,
-            doc = "Relative path to the archive file within the bucket",
-        ),
-        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the archive"),
-        "build_file": attr.label(
-            allow_single_file = True,
-            doc = "BUILD file for the unpacked archive",
-        ),
-        "build_file_contents": attr.string(doc = "The contents of the build file for the target"),
-        "patches": attr.label_list(doc = "Patches to apply, if any.", allow_files = True),
-        "patch_args": attr.string_list(doc = "Arguments to use when applying patches."),
-        "patch_cmds": attr.string_list(doc = "Sequence of Bash commands to be applied after patches are applied."),
-        "strip_prefix": attr.string(doc = "Prefix to strip when archive is unpacked"),
-        "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
-        "type": attr.string(doc = _TYPE_DOC),
-        "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
-        "_provider": attr.string(default = "backblaze"),
-    },
-)
+_S3_BUCKET = {
+    "bucket": attr.string(mandatory = True, doc = "Bucket name"),
+}
+
+_S3_ARCHIVE_EXTRA = {
+    "bucket": attr.string(mandatory = True, doc = "Bucket name"),
+    "profile": attr.string(doc = "Profile to use for authentication."),
+    "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
+}
+
+_GS_EXTRA = {
+    "bucket": attr.string(mandatory = True, doc = "Google Storage bucket name"),
+}
+
+_B2_EXTRA = {
+    "bucket": attr.string(mandatory = True, doc = "Backblaze B2 bucket name"),
+}
+
+# -- Cloud provider rules. ---------------------------------------------------
+
+minio_file = _make_cloud_file_rule("minio", _MINIO_PATH_DOC)
+minio_archive = _make_cloud_archive_rule("minio", _MINIO_PATH_DOC)
+
+s3_file = _make_cloud_file_rule("s3", _BUCKET_PATH_DOC, _S3_BUCKET)
+s3_archive = _make_cloud_archive_rule("s3", _BUCKET_PATH_DOC, _S3_ARCHIVE_EXTRA)
+
+gs_file = _make_cloud_file_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
+gs_archive = _make_cloud_archive_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
+
+b2_file = _make_cloud_file_rule("backblaze", _BUCKET_PATH_DOC, _B2_EXTRA)
+b2_archive = _make_cloud_archive_rule("backblaze", _BUCKET_PATH_DOC, _B2_EXTRA)
 
 # The local_file and local_archive rules exist solely for testing. They
 # exercise the full pipeline (checksum, extraction, strip_prefix, patching,
