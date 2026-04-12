@@ -99,7 +99,9 @@ For Bazel versions before 8, or projects that have not yet migrated to bzlmod:
 # WORKSPACE
 workspace(name = "my_project")
 
-load("@cloud_archive//:cloud_archive.bzl", "gs_archive", "s3_archive", "s3_file")
+load("@cloud_archive//:cloud_archive.bzl", "cloud_archive_setup", "gs_archive", "s3_archive", "s3_file")
+
+cloud_archive_setup()
 
 s3_archive(
     name = "my_model_weights",

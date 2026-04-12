@@ -7,6 +7,24 @@ inside. """
 
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 
+def _tools_config_impl(rctx):
+    rctx.file("BUILD.bazel", "")
+    rctx.file("config.json", rctx.attr.config_json)
+
+_tools_config = repository_rule(
+    implementation = _tools_config_impl,
+    attrs = {"config_json": attr.string(mandatory = True)},
+)
+
+def cloud_archive_setup():
+    """Initialize cloud_archive for WORKSPACE (non-bzlmod) usage.
+
+    Call this in your WORKSPACE file before declaring any cloud_archive
+    rules.  Bzlmod projects do not need to call this — the module
+    extension handles it automatically.
+    """
+    _tools_config(name = "cloud_archive_tools", config_json = "{}")
+
 _CLOUD_FILE_BUILD = """\
 package(default_visibility = ["//visibility:public"])
 
@@ -84,11 +102,11 @@ def _read_tools_config(repo_ctx):
     """Read the module-level tool configuration from @cloud_archive_tools.
 
     Returns a dict mapping provider names to label strings, e.g.
-    {"s3": "@@my_awscli~1.0//:aws"}.  Returns {} if the config repo
-    is not available (e.g. WORKSPACE-only usage).
+    {"s3": "@@my_awscli~1.0//:aws"}.  Returns {} when the config repo
+    carries an empty configuration (the default for WORKSPACE usage via
+    cloud_archive_setup()).
     """
-    config_label = Label("@cloud_archive_tools//:config.json")
-    config_path = repo_ctx.path(config_label)
+    config_path = repo_ctx.path(repo_ctx.attr._tools_config)
     return json.decode(repo_ctx.read(config_path))
 
 def _resolve_tool(repo_ctx, provider, tool_target = None):
@@ -321,6 +339,7 @@ minio_file = repository_rule(
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "minio"),
     },
 )
@@ -345,6 +364,7 @@ minio_archive = repository_rule(
         "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
         "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "minio"),
     },
 )
@@ -364,6 +384,7 @@ s3_file = repository_rule(
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "s3"),
     },
 )
@@ -391,6 +412,7 @@ s3_archive = repository_rule(
         "type": attr.string(doc = _TYPE_DOC),
         "file_version": attr.string(doc = "file version id of object if bucket is versioned"),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "s3"),
     },
 )
@@ -410,6 +432,7 @@ gs_file = repository_rule(
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "google"),
     },
 )
@@ -435,6 +458,7 @@ gs_archive = repository_rule(
         "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
         "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "google"),
     },
 )
@@ -454,6 +478,7 @@ b2_file = repository_rule(
         ),
         "executable": attr.bool(doc="If the downloaded file should be made executable."),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "backblaze"),
     },
 )
@@ -479,6 +504,7 @@ b2_archive = repository_rule(
         "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
         "type": attr.string(doc = _TYPE_DOC),
         "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+        "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
         "_provider": attr.string(default = "backblaze"),
     },
 )
