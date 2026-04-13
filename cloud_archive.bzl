@@ -34,6 +34,30 @@ filegroup(
 )
 """
 
+# Permanent-failure signals from each provider's CLI.
+# If stderr contains any of these, retrying will not help.
+_PERMANENT_FAILURE_SIGNALS = [
+    "Access Denied",
+    "403",
+    "404",
+    "NoSuchKey",
+    "NoSuchBucket",
+    "InvalidBucketName",
+    "AuthorizationError",
+    "credentials",
+    "Forbidden",
+    "does not exist",
+    "not found",
+]
+
+def _is_permanent_failure(stderr):
+    """Returns True if stderr indicates a non-transient error (e.g. auth, missing object)."""
+    lower = stderr.lower()
+    for signal in _PERMANENT_FAILURE_SIGNALS:
+        if signal.lower() in lower:
+            return True
+    return False
+
 def validate_checksum(repo_ctx, url, local_path, expected_sha256):
     # Verify checksum
     if repo_ctx.os.name == "linux":
@@ -146,7 +170,9 @@ def cloud_file_download(
         file_version = "",
         downloaded_file_path = "downloaded",
         executable = False,
-        tool_target = None):
+        tool_target = None,
+        download_max_attempts = 3,
+        download_backoff_base = 5):
     """ Securely downloads a file from Minio, then places a BUILD file inside. """
     repo_root = repo_ctx.path(".")
     forbidden_files = [
@@ -173,6 +199,8 @@ def cloud_file_download(
         file_version,
         "file/" + downloaded_file_path,
         tool_target = tool_target,
+        download_max_attempts = download_max_attempts,
+        download_backoff_base = download_backoff_base,
     )
     if executable:
         repo_ctx.execute(["chmod", "+x", "file/" + downloaded_file_path])
@@ -190,7 +218,9 @@ def cloud_archive_download(
         build_file_contents = "",
         profile = "",
         file_version = "",
-        tool_target = None):
+        tool_target = None,
+        download_max_attempts = 3,
+        download_backoff_base = 5):
     """ Securely downloads and unpacks an archive from Minio, then places a
     BUILD file inside. """
     downloaded_file_path = file_path
@@ -206,7 +236,7 @@ def cloud_archive_download(
 
     # Download to the basename so extraction can find the file, even when
     # file_path contains directory components (e.g. minio paths).
-    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename, tool_target = tool_target)
+    cloud_download(repo_ctx, file_path, expected_sha256, provider, bucket, profile, file_version, filename, tool_target = tool_target, download_max_attempts = download_max_attempts, download_backoff_base = download_backoff_base)
 
     # Extract
     extract_archive(repo_ctx, filename, strip_prefix, add_prefix, build_file, build_file_contents)
@@ -224,7 +254,9 @@ def cloud_download(
         profile = "",
         file_version = "",
         downloaded_file_path = "",
-        tool_target = None):
+        tool_target = None,
+        download_max_attempts = 3,
+        download_backoff_base = 5):
     """ Securely downloads a file from a cloud provider. """
     downloaded_file_path = downloaded_file_path or repo_ctx.path(file_path).basename
 
@@ -239,6 +271,7 @@ def cloud_download(
             fail("Could not find 'cp' command.")
         src_url = file_path
         cmd = [tool_path, file_path, downloaded_file_path]
+        download_max_attempts = 1  # Local copies are never transient; never retry.
     else:
         tool_path = _resolve_tool(repo_ctx, provider, tool_target)
 
@@ -260,11 +293,31 @@ def cloud_download(
             src_url = "b2://{}/{}".format(bucket, file_path)
             cmd = [tool_path, "file", "download", "--no-progress", src_url, downloaded_file_path]
 
-    # Download.
-    repo_ctx.report_progress("Downloading {}.".format(src_url))
+    # Download with exponential-backoff retry on transient failures.
+    repo_ctx.report_progress("Downloading {} (attempt 1/{}).".format(src_url, download_max_attempts))
     result = repo_ctx.execute(cmd, timeout = 1800)
+    attempt = 1
+
+    for _i in range(download_max_attempts - 1):
+        if result.return_code == 0:
+            break
+        attempt += 1
+        if _is_permanent_failure(result.stderr):
+            fail("Permanent failure downloading {} from {}: {}".format(src_url, provider, result.stderr))
+        delay = download_backoff_base * (2 ** _i)  # 5s, 10s, 20s, ...
+        repo_ctx.report_progress(
+            "Download attempt {}/{} failed (transient). Retrying in {}s: {}".format(
+                attempt - 1, download_max_attempts, delay, result.stderr.strip(),
+            ),
+        )
+        repo_ctx.execute(["sleep", str(delay)])
+        repo_ctx.report_progress("Downloading {} (attempt {}/{}).".format(src_url, attempt, download_max_attempts))
+        result = repo_ctx.execute(cmd, timeout = 1800)
+
     if result.return_code != 0:
-        fail("Failed to download {} from {}: {}".format(src_url, provider, result.stderr))
+        fail("Failed to download {} from {} after {} attempt(s): {}".format(
+            src_url, provider, attempt, result.stderr,
+        ))
 
     # Verify.
     validate_checksum(repo_ctx, file_path, downloaded_file_path, expected_sha256)
@@ -307,6 +360,8 @@ def _cloud_file_impl(ctx):
         downloaded_file_path = ctx.attr.downloaded_file_path,
         executable = ctx.attr.executable,
         tool_target = ctx.attr.tool_target,
+        download_max_attempts = ctx.attr.download_max_attempts,
+        download_backoff_base = ctx.attr.download_backoff_base,
     )
 
 def _cloud_archive_impl(ctx):
@@ -324,6 +379,8 @@ def _cloud_archive_impl(ctx):
         bucket = ctx.attr.bucket if hasattr(ctx.attr, "bucket") else "",
         file_version = ctx.attr.file_version if hasattr(ctx.attr, "file_version") else "",
         tool_target = ctx.attr.tool_target,
+        download_max_attempts = ctx.attr.download_max_attempts,
+        download_backoff_base = ctx.attr.download_backoff_base,
     )
 
 # -- Shared attr fragments for cloud provider rules. -------------------------
@@ -338,6 +395,14 @@ _COMMON_CLOUD_FILE_ATTRS = {
     ),
     "executable": attr.bool(doc = "If the downloaded file should be made executable."),
     "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+    "download_max_attempts": attr.int(
+        default = 3,
+        doc = "Maximum number of download attempts before failing. Set to 1 to disable retries.",
+    ),
+    "download_backoff_base": attr.int(
+        default = 5,
+        doc = "Base delay in seconds between retry attempts. Doubles on each retry (exponential backoff).",
+    ),
     "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
 }
 
@@ -355,6 +420,14 @@ _COMMON_CLOUD_ARCHIVE_ATTRS = {
     "add_prefix": attr.string(default = "", doc = _ADD_PREFIX_DOC),
     "type": attr.string(doc = _TYPE_DOC),
     "tool_target": attr.label(allow_single_file = True, doc = _TOOL_TARGET_DOC),
+    "download_max_attempts": attr.int(
+        default = 3,
+        doc = "Maximum number of download attempts before failing. Set to 1 to disable retries.",
+    ),
+    "download_backoff_base": attr.int(
+        default = 5,
+        doc = "Base delay in seconds between retry attempts. Doubles on each retry (exponential backoff).",
+    ),
     "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
 }
 
