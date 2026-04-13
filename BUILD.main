@@ -1,3 +1,9 @@
+sh_library(
+    name = "test_helpers",
+    srcs = ["test_helpers.sh"],
+    visibility = ["//visibility:public"],
+)
+
 sh_test(
     name = "local_archive_test",
     srcs = ["local_archive_test.sh"],
@@ -11,5 +17,8 @@ sh_test(
         "@test_local_archive_add_prefix//:files",
         "@test_local_archive_type//:files",
     ],
-    deps = ["@bazel_tools//tools/bash/runfiles"],
+    deps = [
+        ":test_helpers",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
 )

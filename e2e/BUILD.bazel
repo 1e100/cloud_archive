@@ -7,5 +7,8 @@ sh_test(
         "@test_minio_archive_zstd//:files",
         "@test_minio_archive_patch//:files",
     ],
-    deps = ["@bazel_tools//tools/bash/runfiles"],
+    deps = [
+        "//:test_helpers",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
 )
