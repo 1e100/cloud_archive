@@ -21,9 +21,11 @@ The script will:
 1. Download pinned MinIO server and client binaries into `bin/` (cached across
    runs).
 2. Start a local MinIO server on port 9123.
-3. Create a `testbucket` bucket and upload test data from `../testdata/`.
+3. Create a fresh `MC_CONFIG_DIR`, configure the `local` alias, create a
+   `testbucket` bucket, and upload test data from `../testdata/`.
 4. Run `bazel test` which exercises `minio_file` and `minio_archive` rules
-   (including checksum validation, extraction, `strip_prefix`, and patching).
+   through real `mc cp` fetches from `local/testbucket/...` (including checksum
+   validation, extraction, `strip_prefix`, and patching).
 5. Shut down the server and clean up.
 
 ## What is tested

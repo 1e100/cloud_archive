@@ -272,6 +272,9 @@ cd e2e
 ./run_tests.sh
 ```
 
+That suite spins up a local MinIO server, configures `mc` via `MC_CONFIG_DIR`,
+uploads test objects, and exercises the `local/bucket/key` MinIO path flow.
+
 ## License
 
 Apache 2.0. See [`LICENSE`](LICENSE).

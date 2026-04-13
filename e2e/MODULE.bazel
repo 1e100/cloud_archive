@@ -9,13 +9,13 @@ local_path_override(
 bazel_dep(name = "rules_cc", version = "0.1.1")
 
 # --- MinIO test targets ---
-# run_tests.sh stages local sources under /tmp/cloud_archive_e2e/testbucket.
+# These exercise a real local MinIO server configured by run_tests.sh.
 
 minio_file = use_repo_rule("@cloud_archive//:cloud_archive.bzl", "minio_file")
 
 minio_file(
     name = "test_minio_file",
-    file_path = "/tmp/cloud_archive_e2e/testbucket/test_file.txt",
+    file_path = "local/testbucket/test_file.txt",
     sha256 = "7c5fdb91d42da23cf7f42c786b20b770f64643bfd62ad7f52d3ab4c4fd189eff",
 )
 
@@ -24,14 +24,14 @@ minio_archive = use_repo_rule("@cloud_archive//:cloud_archive.bzl", "minio_archi
 minio_archive(
     name = "test_minio_archive_gz",
     build_file = "//:BUILD.archive",
-    file_path = "/tmp/cloud_archive_e2e/testbucket/test_archive.tar.gz",
+    file_path = "local/testbucket/test_archive.tar.gz",
     sha256 = "e7fefef96c1a5fb3da63966b5dd18ef25ecfb68f5958eaf2c7d339cf7bc9c181",
 )
 
 minio_archive(
     name = "test_minio_archive_zstd",
     build_file = "//:BUILD.archive",
-    file_path = "/tmp/cloud_archive_e2e/testbucket/test_archive.tar.zst",
+    file_path = "local/testbucket/test_archive.tar.zst",
     sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",
     strip_prefix = "dir1",
 )
@@ -39,7 +39,7 @@ minio_archive(
 minio_archive(
     name = "test_minio_archive_patch",
     build_file = "//:BUILD.archive",
-    file_path = "/tmp/cloud_archive_e2e/testbucket/test_archive.tar.zst",
+    file_path = "local/testbucket/test_archive.tar.zst",
     patch_args = ["-p1"],
     patches = ["//patches:test.patch"],
     sha256 = "07237e58db9b30e375d49c41d584600b6c104610c11d2f55f84d4ea92ae62773",

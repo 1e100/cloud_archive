@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs all tests in the cloud_archive repository:
 #   1. Unit tests  – local_archive_test (no external services required)
-#   2. End-to-end tests – minio_e2e_test (stages mc-backed test data)
+#   2. End-to-end tests – minio_e2e_test (spins up a local MinIO server)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
