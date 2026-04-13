@@ -21,7 +21,7 @@ E2E_PASS=false
 echo "========================================"
 echo " Running unit tests"
 echo "========================================"
-if "${BAZEL[@]}" test //:local_archive_test --test_output=all; then
+if "${BAZEL[@]}" test //:local_archive_test --test_output=all && "$REPO_ROOT/downloaded_file_path_validation_test.sh"; then
     UNIT_PASS=true
 else
     echo "ERROR: Unit tests FAILED." >&2

@@ -1,0 +1,16 @@
+module(name = "downloaded_file_path_escape_test")
+
+bazel_dep(name = "cloud_archive")
+local_path_override(
+    module_name = "cloud_archive",
+    path = "../..",
+)
+
+local_file = use_repo_rule("@cloud_archive//:cloud_archive.bzl", "local_file")
+
+local_file(
+    name = "bad_local_file",
+    src = "//:file.txt",
+    sha256 = "7c5fdb91d42da23cf7f42c786b20b770f64643bfd62ad7f52d3ab4c4fd189eff",
+    downloaded_file_path = "../escaped.txt",
+)

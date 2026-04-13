@@ -1,0 +1,6 @@
+exports_files(["file.txt"])
+
+filegroup(
+    name = "trigger",
+    srcs = ["@bad_local_file//file:file"],
+)

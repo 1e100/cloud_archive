@@ -162,6 +162,33 @@ def _expand_env_path(repo_ctx, path):
         fail("Environment variable '{}' is not set for '{}'.".format(var_name, path))
     return value + suffix
 
+def _validate_downloaded_file_path(repo_ctx, downloaded_file_path):
+    """Validate that downloaded_file_path stays beneath the generated file/ tree."""
+    if not downloaded_file_path:
+        fail("downloaded_file_path must be a non-empty normalized relative path beneath file/")
+    if downloaded_file_path.startswith("/"):
+        fail("downloaded_file_path '{}' must be relative to file/".format(downloaded_file_path))
+
+    for segment in downloaded_file_path.split("/"):
+        if segment in ["", ".", ".."]:
+            fail(
+                "downloaded_file_path '{}' must be a normalized relative path beneath file/".format(
+                    downloaded_file_path,
+                ),
+            )
+
+    download_path = repo_ctx.path("file/" + downloaded_file_path)
+    file_root = repo_ctx.path("file")
+    download_path_str = str(download_path)
+    file_root_str = str(file_root)
+    if download_path_str != file_root_str and not download_path_str.startswith(file_root_str + "/"):
+        fail("downloaded_file_path '{}' escapes the generated file/ directory".format(downloaded_file_path))
+
+    if download_path in [repo_ctx.path("file/BUILD"), repo_ctx.path("file/BUILD.bazel")]:
+        fail("downloaded_file_path '{}' cannot overwrite Bazel metadata under file/".format(downloaded_file_path))
+
+    return download_path
+
 def _resolve_tool(repo_ctx, provider, tool_target = None):
     """Returns a path to the CLI binary for the given provider.
 
@@ -202,18 +229,7 @@ def cloud_file_download(
         download_max_attempts = 3,
         download_backoff_base = 5):
     """ Securely downloads a file from Minio, then places a BUILD file inside. """
-    repo_root = repo_ctx.path(".")
-    forbidden_files = [
-        repo_root,
-        repo_ctx.path("WORKSPACE"),
-        repo_ctx.path("BUILD"),
-        repo_ctx.path("BUILD.bazel"),
-        repo_ctx.path("file/BUILD"),
-        repo_ctx.path("file/BUILD.bazel"),
-    ]
-    download_path = repo_ctx.path("file/" + downloaded_file_path)
-    if download_path in forbidden_files or not str(download_path).startswith(str(repo_root)):
-        fail("'%s' cannot be used as downloaded_file_path" % downloaded_file_path)
+    _validate_downloaded_file_path(repo_ctx, downloaded_file_path)
 
     # This has to be before the download otherwise some tools may fail to create the directory.
     repo_ctx.file("file/BUILD", _CLOUD_FILE_BUILD.format(downloaded_file_path))
