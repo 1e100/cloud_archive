@@ -258,7 +258,7 @@ def cloud_download(
         elif provider == "backblaze":
             # NOTE: currently untested, as I don't have a B2 account.
             src_url = "b2://{}/{}".format(bucket, file_path)
-            cmd = [tool_path, "download-file-by-name", "--noProgress", bucket, file_path, downloaded_file_path]
+            cmd = [tool_path, "file", "download", "--no-progress", src_url, downloaded_file_path]
 
     # Download.
     repo_ctx.report_progress("Downloading {}.".format(src_url))
