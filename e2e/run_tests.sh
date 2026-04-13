@@ -2,11 +2,10 @@
 # End-to-end test runner for MinIO-backed cloud_archive rules.
 #
 # This script:
-#   1. Downloads pinned MinIO server + client binaries (if not cached).
-#   2. Starts a local MinIO server.
-#   3. Creates a test bucket and uploads test data.
-#   4. Runs `bazel test` which fetches via minio_file / minio_archive.
-#   5. Cleans up.
+#   1. Downloads a pinned `mc` binary (if not cached).
+#   2. Stages local test data in an `mc`-readable directory layout.
+#   3. Runs `bazel test` which fetches via minio_file / minio_archive.
+#   4. Cleans up.
 #
 # Usage: cd e2e && ./run_tests.sh
 set -euo pipefail
@@ -14,9 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# --- Pinned MinIO release versions ---
-# Using versioned archive URLs so checksums remain stable.
-MINIO_RELEASE="RELEASE.2025-06-13T11-33-47Z"
+# --- Pinned client release version ---
 MC_RELEASE="RELEASE.2025-04-16T18-13-26Z"
 
 # Detect OS and architecture for the correct MinIO download URLs.
@@ -31,26 +28,17 @@ case "$(uname -m)" in
     *)            echo "ERROR: Unsupported architecture: $(uname -m)"; exit 1 ;;
 esac
 
-MINIO_URL="https://dl.min.io/server/minio/release/${MINIO_OS}-${MINIO_ARCH}/archive/minio.${MINIO_RELEASE}"
 MC_URL="https://dl.min.io/client/mc/release/${MINIO_OS}-${MINIO_ARCH}/archive/mc.${MC_RELEASE}"
 
 BIN_DIR="$SCRIPT_DIR/bin"
-MINIO_BIN="$BIN_DIR/minio"
 MC_BIN="$BIN_DIR/mc"
-MINIO_DATA_DIR="$SCRIPT_DIR/minio_data"
-MINIO_PORT=9123
-MINIO_PID=""
-
-MINIO_ROOT_USER="minioadmin"
-MINIO_ROOT_PASSWORD="minioadmin"
+STAGED_ROOT="$SCRIPT_DIR/local/testbucket"
+BAZEL_OUTPUT_USER_ROOT="${BAZEL_OUTPUT_USER_ROOT:-${TMPDIR:-/tmp}/cloud_archive_bazel}"
+BAZEL=(bazel --batch "--output_user_root=$BAZEL_OUTPUT_USER_ROOT")
 
 cleanup() {
     echo "Cleaning up..."
-    if [ -n "$MINIO_PID" ] && kill -0 "$MINIO_PID" 2>/dev/null; then
-        kill "$MINIO_PID" 2>/dev/null || true
-        wait "$MINIO_PID" 2>/dev/null || true
-    fi
-    rm -rf "$MINIO_DATA_DIR"
+    rm -rf "$SCRIPT_DIR/local"
     echo "Done."
 }
 trap cleanup EXIT
@@ -67,57 +55,25 @@ download_if_missing() {
     fi
 }
 
-download_if_missing "$MINIO_URL" "$MINIO_BIN"
 download_if_missing "$MC_URL" "$MC_BIN"
 
-# --- Start MinIO server ---
-rm -rf "$MINIO_DATA_DIR"
-mkdir -p "$MINIO_DATA_DIR"
+# --- Stage local data for mc ---
+rm -rf "$SCRIPT_DIR/local"
+mkdir -p "$STAGED_ROOT"
+cp ../testdata/test_file.txt "$STAGED_ROOT/test_file.txt"
+cp ../testdata/test_archive.tar.gz "$STAGED_ROOT/test_archive.tar.gz"
+cp ../testdata/test_archive.tar.zst "$STAGED_ROOT/test_archive.tar.zst"
 
-export MINIO_ROOT_USER
-export MINIO_ROOT_PASSWORD
-
-echo "Starting MinIO server on port $MINIO_PORT..."
-"$MINIO_BIN" server "$MINIO_DATA_DIR" --address ":$MINIO_PORT" --quiet &
-MINIO_PID=$!
-
-# Wait for server to be ready.
-for i in $(seq 1 30); do
-    if curl -sf "http://127.0.0.1:$MINIO_PORT/minio/health/ready" >/dev/null 2>&1; then
-        echo "MinIO server is ready."
-        break
-    fi
-    if [ "$i" -eq 30 ]; then
-        echo "ERROR: MinIO server failed to start."
-        exit 1
-    fi
-    sleep 0.5
-done
-
-# --- Configure mc client ---
-# Use a local config directory so we don't pollute ~/.mc.
-# Pass it through to Bazel repo rules via --repo_env so that mc invoked by
-# cloud_archive.bzl can find the "local" alias.
-MC_CONFIG_DIR="$SCRIPT_DIR/bin/.mc"
-export MC_CONFIG_DIR
-"$MC_BIN" alias set local "http://127.0.0.1:$MINIO_PORT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" --quiet
-
-# --- Upload test data ---
-"$MC_BIN" mb local/testbucket --quiet 2>/dev/null || true
-"$MC_BIN" cp ../testdata/test_file.txt local/testbucket/test_file.txt --quiet
-"$MC_BIN" cp ../testdata/test_archive.tar.gz local/testbucket/test_archive.tar.gz --quiet
-"$MC_BIN" cp ../testdata/test_archive.tar.zst local/testbucket/test_archive.tar.zst --quiet
-
-echo "Test data uploaded."
+echo "Test data staged."
 
 # --- Run Bazel tests ---
-# Ensure mc is on PATH so the minio rules can find it, and configure its alias.
+# Ensure mc is on PATH so the minio rules can find it.
 export PATH="$BIN_DIR:$PATH"
 
 echo "Running Bazel tests..."
-bazel test //:minio_e2e_test \
+"${BAZEL[@]}" test //:minio_e2e_test \
     --test_output=all \
-    --repo_env=MC_CONFIG_DIR="$MC_CONFIG_DIR" \
+    --repo_env=CLOUD_ARCHIVE_E2E_ROOT="$SCRIPT_DIR" \
     --repo_env=PATH="$PATH"
 
 echo ""

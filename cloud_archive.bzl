@@ -134,6 +134,34 @@ def _read_tools_config(repo_ctx):
     config_path = repo_ctx.path(repo_ctx.attr._tools_config)
     return json.decode(repo_ctx.read(config_path))
 
+def _expand_env_path(repo_ctx, path):
+    """Expand a leading $VAR or ${VAR} prefix in a path."""
+    if not path or path[0] != "$":
+        return path
+
+    if path.startswith("${"):
+        end = path.find("}")
+        if end == -1:
+            fail("Invalid environment path '{}': missing '}}'.".format(path))
+        var_name = path[2:end]
+        suffix = path[end + 1:]
+    else:
+        slash = path.find("/")
+        if slash == -1:
+            var_name = path[1:]
+            suffix = ""
+        else:
+            var_name = path[1:slash]
+            suffix = path[slash:]
+
+    if not var_name:
+        fail("Invalid environment path '{}': empty variable name.".format(path))
+
+    value = repo_ctx.os.environ.get(var_name)
+    if value == None:
+        fail("Environment variable '{}' is not set for '{}'.".format(var_name, path))
+    return value + suffix
+
 def _resolve_tool(repo_ctx, provider, tool_target = None):
     """Returns a path to the CLI binary for the given provider.
 
@@ -258,7 +286,8 @@ def cloud_download(
         download_max_attempts = 3,
         download_backoff_base = 5):
     """ Securely downloads a file from a cloud provider. """
-    downloaded_file_path = downloaded_file_path or repo_ctx.path(file_path).basename
+    resolved_file_path = _expand_env_path(repo_ctx, file_path)
+    downloaded_file_path = downloaded_file_path or repo_ctx.path(resolved_file_path).basename
 
     # Download tooling is pretty similar, but commands are different. Note that
     # Minio does not support bucket per se. The path is expected to contain what
@@ -269,28 +298,28 @@ def cloud_download(
         tool_path = repo_ctx.which("cp")
         if tool_path == None:
             fail("Could not find 'cp' command.")
-        src_url = file_path
-        cmd = [tool_path, file_path, downloaded_file_path]
+        src_url = resolved_file_path
+        cmd = [tool_path, resolved_file_path, downloaded_file_path]
         download_max_attempts = 1  # Local copies are never transient; never retry.
     else:
         tool_path = _resolve_tool(repo_ctx, provider, tool_target)
 
         if provider == "minio":
-            src_url = file_path
+            src_url = resolved_file_path
             cmd = [tool_path, "cp", "-q", src_url, downloaded_file_path]
         elif provider == "google":
-            src_url = "gs://{}/{}".format(bucket, file_path)
+            src_url = "gs://{}/{}".format(bucket, resolved_file_path)
             cmd = [tool_path, "cp", src_url, downloaded_file_path]
         elif provider == "s3":
             extra_flags = ["--profile", profile] if profile else []
             bucket_arg = ["--bucket", bucket]
-            file_arg = ["--key", file_path]
+            file_arg = ["--key", resolved_file_path]
             file_version_arg = ["--version-id", file_version] if file_version else []
-            src_url = "s3://{}/{}".format(bucket, file_path)
+            src_url = "s3://{}/{}".format(bucket, resolved_file_path)
             cmd = [tool_path] + extra_flags + ["s3api", "get-object"] + bucket_arg + file_arg + file_version_arg + [downloaded_file_path]
         elif provider == "backblaze":
             # NOTE: currently untested, as I don't have a B2 account.
-            src_url = "b2://{}/{}".format(bucket, file_path)
+            src_url = "b2://{}/{}".format(bucket, resolved_file_path)
             cmd = [tool_path, "file", "download", "--no-progress", src_url, downloaded_file_path]
 
     # Download with exponential-backoff retry on transient failures.
@@ -298,13 +327,13 @@ def cloud_download(
     result = repo_ctx.execute(cmd, timeout = 1800)
     attempt = 1
 
+    delay = download_backoff_base
     for _i in range(download_max_attempts - 1):
         if result.return_code == 0:
             break
         attempt += 1
         if _is_permanent_failure(result.stderr):
             fail("Permanent failure downloading {} from {}: {}".format(src_url, provider, result.stderr))
-        delay = download_backoff_base * (2 ** _i)  # 5s, 10s, 20s, ...
         repo_ctx.report_progress(
             "Download attempt {}/{} failed (transient). Retrying in {}s: {}".format(
                 attempt - 1, download_max_attempts, delay, result.stderr.strip(),
@@ -313,6 +342,7 @@ def cloud_download(
         repo_ctx.execute(["sleep", str(delay)])
         repo_ctx.report_progress("Downloading {} (attempt {}/{}).".format(src_url, attempt, download_max_attempts))
         result = repo_ctx.execute(cmd, timeout = 1800)
+        delay = delay * 2
 
     if result.return_code != 0:
         fail("Failed to download {} from {} after {} attempt(s): {}".format(

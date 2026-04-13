@@ -6,7 +6,7 @@ assert_file_contains() {
     local expected="$2"
     local label="$3"
     local file
-    file="$(rlocation "$rloc")"
+    file="$(rlocation "$rloc" "")"
     if [ ! -f "$file" ]; then
         echo "FAIL [$label]: file not found: $file (rlocation of $rloc)"
         FAIL=$((FAIL + 1))

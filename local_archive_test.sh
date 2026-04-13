@@ -18,7 +18,7 @@ PASS=0
 FAIL=0
 
 # shellcheck source=test_helpers.sh
-source "$(rlocation cloud_archive/test_helpers.sh)"
+source "$(rlocation cloud_archive/test_helpers.sh "")"
 
 # Test 1: local_file - basic file download + checksum
 assert_file_contains \
