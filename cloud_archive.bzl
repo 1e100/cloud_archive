@@ -61,12 +61,13 @@ def extract_archive(repo_ctx, local_path, strip_prefix, add_prefix, build_file, 
 
     # Provide external BUILD file if requested; `build_file_contents` takes
     # priority.
-    bash_path = repo_ctx.os.environ.get("BAZEL_SH", "bash")
     if build_file_contents:
-        repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
+        repo_ctx.delete("BUILD")
+        repo_ctx.delete("BUILD.bazel")
         repo_ctx.file("BUILD.bazel", build_file_contents, executable = False)
     elif build_file:
-        repo_ctx.execute([bash_path, "-c", "rm -f BUILD BUILD.bazel"])
+        repo_ctx.delete("BUILD")
+        repo_ctx.delete("BUILD.bazel")
         repo_ctx.symlink(build_file, "BUILD.bazel")
 
 _TYPE_DOC = """The archive type of the downloaded file.
