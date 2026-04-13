@@ -431,23 +431,21 @@ _COMMON_CLOUD_ARCHIVE_ATTRS = {
     "_tools_config": attr.label(default = "@cloud_archive_tools//:config.json", allow_single_file = True),
 }
 
-def _make_cloud_file_rule(provider, file_path_doc, extra_attrs = None):
-    """Create a repository_rule for downloading a single file from a cloud provider."""
+def _cloud_file_attrs(file_path_doc, extra_attrs, provider):
+    """Build the attrs dict for a cloud file repository rule."""
     attrs = {"file_path": attr.string(mandatory = True, doc = file_path_doc)}
     attrs.update(_COMMON_CLOUD_FILE_ATTRS)
-    if extra_attrs:
-        attrs.update(extra_attrs)
+    attrs.update(extra_attrs)
     attrs["_provider"] = attr.string(default = provider)
-    return repository_rule(implementation = _cloud_file_impl, attrs = attrs)
+    return attrs
 
-def _make_cloud_archive_rule(provider, file_path_doc, extra_attrs = None):
-    """Create a repository_rule for downloading and extracting an archive from a cloud provider."""
+def _cloud_archive_attrs(file_path_doc, extra_attrs, provider):
+    """Build the attrs dict for a cloud archive repository rule."""
     attrs = {"file_path": attr.string(mandatory = True, doc = file_path_doc)}
     attrs.update(_COMMON_CLOUD_ARCHIVE_ATTRS)
-    if extra_attrs:
-        attrs.update(extra_attrs)
+    attrs.update(extra_attrs)
     attrs["_provider"] = attr.string(default = provider)
-    return repository_rule(implementation = _cloud_archive_impl, attrs = attrs)
+    return attrs
 
 # -- Provider-specific extra attrs. ------------------------------------------
 
@@ -469,18 +467,44 @@ _B2_EXTRA = {
 }
 
 # -- Cloud provider rules. ---------------------------------------------------
+# repository_rule() is called directly at module level (not inside a helper
+# function) to avoid Starlark build-context scope errors.
 
-minio_file = _make_cloud_file_rule("minio", _MINIO_PATH_DOC)
-minio_archive = _make_cloud_archive_rule("minio", _MINIO_PATH_DOC)
+minio_file = repository_rule(
+    implementation = _cloud_file_impl,
+    attrs = _cloud_file_attrs(_MINIO_PATH_DOC, {}, "minio"),
+)
+minio_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = _cloud_archive_attrs(_MINIO_PATH_DOC, {}, "minio"),
+)
 
-s3_file = _make_cloud_file_rule("s3", _BUCKET_PATH_DOC, _S3_EXTRA)
-s3_archive = _make_cloud_archive_rule("s3", _BUCKET_PATH_DOC, _S3_EXTRA)
+s3_file = repository_rule(
+    implementation = _cloud_file_impl,
+    attrs = _cloud_file_attrs(_BUCKET_PATH_DOC, _S3_EXTRA, "s3"),
+)
+s3_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = _cloud_archive_attrs(_BUCKET_PATH_DOC, _S3_EXTRA, "s3"),
+)
 
-gs_file = _make_cloud_file_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
-gs_archive = _make_cloud_archive_rule("google", _BUCKET_PATH_DOC, _GS_EXTRA)
+gs_file = repository_rule(
+    implementation = _cloud_file_impl,
+    attrs = _cloud_file_attrs(_BUCKET_PATH_DOC, _GS_EXTRA, "google"),
+)
+gs_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = _cloud_archive_attrs(_BUCKET_PATH_DOC, _GS_EXTRA, "google"),
+)
 
-b2_file = _make_cloud_file_rule("backblaze", _BUCKET_PATH_DOC, _B2_EXTRA)
-b2_archive = _make_cloud_archive_rule("backblaze", _BUCKET_PATH_DOC, _B2_EXTRA)
+b2_file = repository_rule(
+    implementation = _cloud_file_impl,
+    attrs = _cloud_file_attrs(_BUCKET_PATH_DOC, _B2_EXTRA, "backblaze"),
+)
+b2_archive = repository_rule(
+    implementation = _cloud_archive_impl,
+    attrs = _cloud_archive_attrs(_BUCKET_PATH_DOC, _B2_EXTRA, "backblaze"),
+)
 
 # The local_file and local_archive rules exist solely for testing. They
 # exercise the full pipeline (checksum, extraction, strip_prefix, patching,
