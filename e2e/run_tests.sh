@@ -32,13 +32,13 @@ MC_URL="https://dl.min.io/client/mc/release/${MINIO_OS}-${MINIO_ARCH}/archive/mc
 
 BIN_DIR="$SCRIPT_DIR/bin"
 MC_BIN="$BIN_DIR/mc"
-STAGED_ROOT="$SCRIPT_DIR/local/testbucket"
+STAGED_ROOT="/tmp/cloud_archive_e2e/testbucket"
 BAZEL_OUTPUT_USER_ROOT="${BAZEL_OUTPUT_USER_ROOT:-${TMPDIR:-/tmp}/cloud_archive_bazel}"
 BAZEL=(bazel --batch "--output_user_root=$BAZEL_OUTPUT_USER_ROOT")
 
 cleanup() {
     echo "Cleaning up..."
-    rm -rf "$SCRIPT_DIR/local"
+    rm -rf "/tmp/cloud_archive_e2e"
     echo "Done."
 }
 trap cleanup EXIT
@@ -58,7 +58,7 @@ download_if_missing() {
 download_if_missing "$MC_URL" "$MC_BIN"
 
 # --- Stage local data for mc ---
-rm -rf "$SCRIPT_DIR/local"
+rm -rf "/tmp/cloud_archive_e2e"
 mkdir -p "$STAGED_ROOT"
 cp ../testdata/test_file.txt "$STAGED_ROOT/test_file.txt"
 cp ../testdata/test_archive.tar.gz "$STAGED_ROOT/test_archive.tar.gz"
@@ -73,7 +73,6 @@ export PATH="$BIN_DIR:$PATH"
 echo "Running Bazel tests..."
 "${BAZEL[@]}" test //:minio_e2e_test \
     --test_output=all \
-    --repo_env=CLOUD_ARCHIVE_E2E_ROOT="$SCRIPT_DIR" \
     --repo_env=PATH="$PATH"
 
 echo ""
