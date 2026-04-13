@@ -211,6 +211,8 @@ For MinIO rules, `file_path` should be the full `mc` source path, for example
 | `file_path` | yes | Object path inside the bucket, or the full MinIO source path |
 | `sha256` | yes | Expected SHA-256 checksum |
 | `tool_target` | no | Label of a CLI binary; overrides extension config and `$PATH` |
+| `download_max_attempts` | no | Maximum download attempts before failing. Default: `3`. Set to `1` to disable retries. |
+| `download_backoff_base` | no | Base delay in seconds between retry attempts; doubles each attempt (exponential backoff). Default: `5`. |
 
 ### Archive-only attributes
 
